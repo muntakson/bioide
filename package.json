@@ -2,7 +2,7 @@
   "name": "ghbio-coscientist",
   "displayName": "GHBIO Co-Scientist",
   "description": "PlatformIO-style scRNA-seq bioinformatics IDE — projects, libraries, tutorials, and reliable single-shot AI analysis.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "ghbio",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Data Science", "Machine Learning", "Education", "Other"],

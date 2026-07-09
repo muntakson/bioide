@@ -24,7 +24,7 @@ export function loadTutorials(context: vscode.ExtensionContext): Tutorial[] {
   const out: Tutorial[] = []
   if (!fs.existsSync(root)) return out
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue
+    if (!entry.isDirectory() || entry.name.startsWith("_")) continue // "_"-prefixed = drafts, ignored
     const manifest = path.join(root, entry.name, "tutorial.json")
     if (!fs.existsSync(manifest)) continue
     try {
@@ -34,7 +34,7 @@ export function loadTutorials(context: vscode.ExtensionContext): Tutorial[] {
       vscode.window.showErrorMessage(`GHBIO: bad tutorial.json in ${entry.name}: ${e}`)
     }
   }
-  return out
+  return out.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 type Node = { kind: "tutorial"; t: Tutorial } | { kind: "step"; t: Tutorial; s: Step; index: number }

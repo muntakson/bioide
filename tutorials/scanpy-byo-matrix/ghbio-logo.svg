@@ -1,0 +1,16 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GHBIO">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0d9488"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <g stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" fill="none">
+    <path d="M23 15 C41 26, 23 38, 41 49" opacity="0.95"/>
+    <path d="M41 15 C23 26, 41 38, 23 49" opacity="0.95"/>
+    <line x1="24.5" y1="21" x2="39.5" y2="21"/>
+    <line x1="27" y1="32" x2="37" y2="32"/>
+    <line x1="24.5" y1="43" x2="39.5" y2="43"/>
+  </g>
+</svg>

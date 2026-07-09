@@ -1,0 +1,11 @@
+{
+  "id": "scanpy-byo-matrix",
+  "name": "Scanpy — bring your own matrix",
+  "summary": "이미 있는 10x count matrix로 QC→클러스터링→AI (STARsolo 생략)",
+  "steps": [
+    { "id": "setup", "title": "0. Setup Python env", "ko": "분석 환경(Scanpy) 설치", "kind": "task", "run": "bash 00_setup_env.sh" },
+    { "id": "qc", "title": "1. QC & clustering (your matrix)", "ko": "~/ghbio-workspace/my_matrix 사용", "kind": "task", "run": "~/ghbio-venv/bin/python 03_scanpy_qc.py --matrix ~/ghbio-workspace/my_matrix" },
+    { "id": "ai", "title": "2. AI analysis & hypotheses", "ko": "AI 해석·가설 (패널)", "kind": "ai" },
+    { "id": "report", "title": "3. Generate PDF report", "ko": "통합 리포트 생성", "kind": "task", "run": "bash 05_make_report.sh" }
+  ]
+}
