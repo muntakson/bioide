@@ -1,0 +1,85 @@
+{
+  "name": "ghbio-coscientist",
+  "displayName": "GHBIO Co-Scientist",
+  "description": "PlatformIO-style scRNA-seq bioinformatics IDE — projects, libraries, tutorials, and reliable single-shot AI analysis.",
+  "version": "0.1.1",
+  "publisher": "ghbio",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Data Science", "Machine Learning", "Education", "Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "ghbio", "title": "GHBIO Co-Scientist", "icon": "media/ghbio-activity.svg" }
+      ]
+    },
+    "views": {
+      "ghbio": [
+        { "id": "ghbio.tutorials", "name": "Tutorials" },
+        { "id": "ghbio.projects", "name": "Projects" },
+        { "id": "ghbio.libraries", "name": "Libraries" }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ghbio.tutorials",
+        "contents": "GHBIO Co-Scientist — scRNA-seq workbench.\n[$(home) Open GHBIO Home](command:ghbio.openHome)\n[$(sparkle) AI Analysis](command:ghbio.openAI)"
+      }
+    ],
+    "commands": [
+      { "command": "ghbio.openHome", "title": "GHBIO: Open Home", "icon": "$(home)" },
+      { "command": "ghbio.openAI", "title": "GHBIO: AI Analysis", "icon": "$(sparkle)" },
+      { "command": "ghbio.refresh", "title": "GHBIO: Refresh", "icon": "$(refresh)" },
+      { "command": "ghbio.runStep", "title": "Run tutorial step", "icon": "$(play)" },
+      { "command": "ghbio.openTutorial", "title": "Open tutorial" },
+      { "command": "ghbio.newProject", "title": "New Project", "icon": "$(add)" },
+      { "command": "ghbio.openProject", "title": "Open Project" },
+      { "command": "ghbio.installLibrary", "title": "Install / Build", "icon": "$(cloud-download)" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "ghbio.openHome", "when": "view == ghbio.tutorials", "group": "navigation@1" },
+        { "command": "ghbio.openAI", "when": "view == ghbio.tutorials", "group": "navigation@2" },
+        { "command": "ghbio.newProject", "when": "view == ghbio.projects", "group": "navigation@1" },
+        { "command": "ghbio.refresh", "when": "view == ghbio.libraries", "group": "navigation@1" }
+      ],
+      "view/item/context": [
+        { "command": "ghbio.runStep", "when": "view == ghbio.tutorials && viewItem == step", "group": "inline" },
+        { "command": "ghbio.installLibrary", "when": "view == ghbio.libraries && viewItem == library", "group": "inline" },
+        { "command": "ghbio.openProject", "when": "view == ghbio.projects && viewItem == project", "group": "inline" }
+      ]
+    },
+    "configuration": {
+      "title": "GHBIO Co-Scientist",
+      "properties": {
+        "ghbio.tutorialsDir": {
+          "type": "string",
+          "default": "",
+          "description": "Directory containing tutorial modules (defaults to the bundled tutorials/)."
+        },
+        "ghbio.projectsDir": {
+          "type": "string",
+          "default": "~/ghbio-workspace/projects",
+          "description": "Directory where analysis projects live."
+        },
+        "ghbio.providersConfig": {
+          "type": "string",
+          "default": "~/.config/ghbio/providers.json",
+          "description": "Path to the JSON file holding LLM provider API keys."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "npx --yes @vscode/vsce package --no-dependencies -o ghbio-coscientist.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.23.0",
+    "typescript": "^5.4.0"
+  }
+}

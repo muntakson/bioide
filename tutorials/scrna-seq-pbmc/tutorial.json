@@ -1,0 +1,15 @@
+{
+  "id": "scrna-seq-pbmc",
+  "name": "scRNA-seq PBMC (10x)",
+  "summary": "FASTQ → count matrix → clustering → AI hypotheses",
+  "steps": [
+    { "id": "setup", "title": "0. Setup Python env", "ko": "분석 환경(Scanpy) 설치", "kind": "task", "run": "bash 00_setup_env.sh" },
+    { "id": "download", "title": "1. Download PBMC FASTQ", "ko": "공개 10x PBMC 데이터", "kind": "task", "run": "bash 01_download_pbmc.sh" },
+    { "id": "build-star", "title": "2a. Build STARsolo", "ko": "STAR 소스 빌드(ARM)", "kind": "task", "run": "bash 02a_build_starsolo.sh" },
+    { "id": "reference", "title": "2b. Reference + index", "ko": "GRCh38 인덱스(1회성)", "kind": "task", "run": "bash 02b_reference.sh" },
+    { "id": "align", "title": "2c. Run STARsolo", "ko": "count matrix 생성", "kind": "task", "run": "bash 02c_run_starsolo.sh" },
+    { "id": "qc", "title": "3. QC & clustering (Scanpy)", "ko": "UMAP·marker·cell type", "kind": "task", "run": "~/ghbio-venv/bin/python 03_scanpy_qc.py" },
+    { "id": "ai", "title": "4. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 패널)", "kind": "ai" },
+    { "id": "report", "title": "5. Generate PDF report", "ko": "통합 리포트 생성", "kind": "task", "run": "bash 05_make_report.sh" }
+  ]
+}
