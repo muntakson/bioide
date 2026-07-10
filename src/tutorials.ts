@@ -1,97 +1,94 @@
 import * as vscode from "vscode"
-import * as fs from "fs"
-import * as path from "path"
-import { tutorialsDir, runShellTask } from "./util"
+import { runShellTask } from "./util"
+import { Module, loadModules } from "./modules"
+import { Pipeline, Stage, ensureProject, isStageDone } from "./pipeline"
 
-export interface Step {
-  id: string
-  title: string
-  ko?: string
-  kind: "task" | "ai"
-  run?: string // shell command for kind:"task" (relative to the tutorial dir)
-  desc?: string
-}
-export interface Tutorial {
-  id: string
-  name: string
-  summary?: string
-  dir: string
-  steps: Step[]
-}
-
-export function loadTutorials(context: vscode.ExtensionContext): Tutorial[] {
-  const root = tutorialsDir(context)
-  const out: Tutorial[] = []
-  if (!fs.existsSync(root)) return out
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.name.startsWith("_")) continue // "_"-prefixed = drafts, ignored
-    const manifest = path.join(root, entry.name, "tutorial.json")
-    if (!fs.existsSync(manifest)) continue
-    try {
-      const m = JSON.parse(fs.readFileSync(manifest, "utf8"))
-      out.push({ ...m, dir: path.join(root, entry.name), steps: m.steps ?? [] })
-    } catch (e) {
-      vscode.window.showErrorMessage(`GHBIO: bad tutorial.json in ${entry.name}: ${e}`)
-    }
-  }
-  return out.sort((a, b) => a.name.localeCompare(b.name))
-}
-
-type Node = { kind: "tutorial"; t: Tutorial } | { kind: "step"; t: Tutorial; s: Step; index: number }
+// Tree over the module registry:
+//   (Module →)? Pipeline → Stage
+// The Module level is shown only when more than one module is installed, so a
+// single-domain install stays flat and simple for non-technical users.
+type Node =
+  | { kind: "module"; m: Module }
+  | { kind: "pipeline"; m: Module; p: Pipeline }
+  | { kind: "stage"; m: Module; p: Pipeline; s: Stage; index: number }
 
 export class TutorialProvider implements vscode.TreeDataProvider<Node> {
   private _onDidChange = new vscode.EventEmitter<void>()
   readonly onDidChangeTreeData = this._onDidChange.event
-  private tutorials: Tutorial[] = []
+  private modules: Module[] = []
 
   constructor(private context: vscode.ExtensionContext) {
     this.refresh()
   }
   refresh() {
-    this.tutorials = loadTutorials(this.context)
+    this.modules = loadModules(this.context)
     this._onDidChange.fire()
   }
-  getTutorials() {
-    return this.tutorials
+  getModules() {
+    return this.modules
   }
 
   getTreeItem(n: Node): vscode.TreeItem {
-    if (n.kind === "tutorial") {
-      const it = new vscode.TreeItem(n.t.name, vscode.TreeItemCollapsibleState.Expanded)
-      it.description = n.t.summary
+    if (n.kind === "module") {
+      const it = new vscode.TreeItem(n.m.name, vscode.TreeItemCollapsibleState.Expanded)
+      it.description = n.m.description
+      it.iconPath = new vscode.ThemeIcon(n.m.icon ?? "package")
+      it.contextValue = "module"
+      return it
+    }
+    if (n.kind === "pipeline") {
+      const it = new vscode.TreeItem(n.p.name, vscode.TreeItemCollapsibleState.Expanded)
+      it.description = n.p.summary
       it.iconPath = new vscode.ThemeIcon("beaker")
-      it.contextValue = "tutorial"
+      it.contextValue = "pipeline"
+      it.command = { command: "ghbio.runPipeline", title: "Run full analysis", arguments: [n.p.id] }
       return it
     }
     const s = n.s
     const it = new vscode.TreeItem(s.title, vscode.TreeItemCollapsibleState.None)
-    it.description = s.ko
+    const done = isStageDone(n.p.id, s.produces)
+    it.description = done ? `✓ ${s.ko ?? ""}`.trim() : s.ko
     it.tooltip = s.desc ?? s.ko
-    it.iconPath = new vscode.ThemeIcon(s.kind === "ai" ? "sparkle" : "play-circle")
+    it.iconPath = new vscode.ThemeIcon(
+      done ? "pass-filled" : s.kind === "ai" ? "sparkle" : "play-circle",
+      done ? new vscode.ThemeColor("charts.green") : undefined,
+    )
     it.contextValue = "step"
     it.command = { command: "ghbio.runStep", title: "Run", arguments: [n] }
     return it
   }
+
   getChildren(n?: Node): Node[] {
-    if (!n) return this.tutorials.map((t) => ({ kind: "tutorial", t }) as Node)
-    if (n.kind === "tutorial") return n.t.steps.map((s, i) => ({ kind: "step", t: n.t, s, index: i }) as Node)
+    if (!n) {
+      // Root: modules if >1, otherwise jump straight to the single module's pipelines.
+      if (this.modules.length > 1) return this.modules.map((m) => ({ kind: "module", m }) as Node)
+      const m = this.modules[0]
+      return m ? m.pipelines.map((p) => ({ kind: "pipeline", m, p }) as Node) : []
+    }
+    if (n.kind === "module") return n.m.pipelines.map((p) => ({ kind: "pipeline", m: n.m, p }) as Node)
+    if (n.kind === "pipeline")
+      return n.p.stages.map((s, i) => ({ kind: "stage", m: n.m, p: n.p, s, index: i }) as Node)
     return []
   }
 }
 
-// Run a tutorial step: kind:"task" → wrapped shell task with guidance banners;
-// kind:"ai" → open the AI Analysis panel.
-export async function runStep(node: Node, openAI: () => void) {
-  if (node.kind !== "step") return
-  const { t, s } = node
+// Run one pipeline stage: kind:"ai" opens the AI panel (for that pipeline);
+// otherwise the stage's shell command runs as a banner-wrapped VS Code task.
+export async function runStep(node: Node, openAI: (pipelineId: string) => void) {
+  if (node.kind !== "stage") return
+  const { p, s } = node
   if (s.kind === "ai") {
-    openAI()
+    openAI(p.id)
     return
   }
   if (!s.run) {
     vscode.window.showWarningMessage(`GHBIO: step "${s.title}" has no command.`)
     return
   }
+  // Outputs are first-class files in Projects/<pipeline>/; the pipeline module owns
+  // this scaffolding and per-step runs reuse it.
+  const resultsDir = ensureProject(p)
+
   const title = s.title.replace(/"/g, "")
   const header =
     `printf "\\n\\033[1;36m▶ %s\\033[0m\\n" "${title}"; ` +
@@ -100,7 +97,7 @@ export async function runStep(node: Node, openAI: () => void) {
     `__rc=$?; echo ""; ` +
     `if [ "$__rc" -eq 0 ]; then printf "\\033[1;32m✅ 완료: %s\\033[0m\\n" "${title}"; ` +
     `else printf "\\033[1;31m⚠ 오류(exit %s): %s\\033[0m\\n" "$__rc" "${title}"; fi; ` +
-    `echo "→ 다음 단계는 왼쪽 GHBIO → Tutorials 에서 이어서 누르세요."; echo "";`
+    `echo "→ 다음 단계는 왼쪽 GHBIO → Pipelines 에서 이어서 누르세요."; echo "";`
   const full = `${header} { ${s.run}; }; ${footer}`
-  await runShellTask(`GHBIO: ${title}`, full, t.dir)
+  await runShellTask(`GHBIO: ${title}`, full, p.dir, { GHBIO_RESULTS: resultsDir })
 }

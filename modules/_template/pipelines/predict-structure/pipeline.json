@@ -1,0 +1,14 @@
+{
+  "id": "predict-structure",
+  "name": "Predict structure (example)",
+  "summary": "sequence → predicted 3D structure → metrics → AI",
+
+  "//": "Each stage: kind 'task' runs `run` (a shell command, cwd = this folder) in the terminal; kind 'ai' opens the AI panel. `produces` lists artifacts (relative to results/) that mark the stage ✓ done.",
+
+  "stages": [
+    { "id": "setup",   "title": "0. Setup tools",        "ko": "도구 설치",      "kind": "task", "run": "bash 00_setup_env.sh" },
+    { "id": "predict", "title": "1. Predict structure",  "ko": "구조 예측",      "kind": "task", "run": "bash 01_predict.sh", "produces": ["structure.pdb", "metrics.csv"] },
+    { "id": "ai",      "title": "2. AI interpretation",  "ko": "AI 해석·가설",   "kind": "ai" },
+    { "id": "report",  "title": "3. Generate report",    "ko": "리포트 생성",    "kind": "task", "run": "bash 02_report.sh", "produces": ["report.pdf"] }
+  ]
+}

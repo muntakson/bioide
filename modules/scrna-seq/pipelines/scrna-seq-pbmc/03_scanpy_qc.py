@@ -40,10 +40,15 @@ import matplotlib.pyplot as plt  # noqa: E402
 # Paths / 경로
 # -----------------------------------------------------------------------------
 HOME = os.path.expanduser("~")
-DEFAULT_MATRIX = os.path.join(
-    HOME, "ghbio-tutorial", "results", "starsolo", "Solo.out", "Gene", "filtered"
+# Results are first-class project files. GHBIO_RESULTS is injected by the extension and
+# points at the project (~/ghbio-workspace/projects/<tutorial>/results). Falls back to the
+# legacy path (a symlink to the project) for manual runs.
+RESULTS_DIR = os.environ.get(
+    "GHBIO_RESULTS", os.path.join(HOME, "ghbio-tutorial", "results")
 )
-RESULTS_DIR = os.path.join(HOME, "ghbio-tutorial", "results")
+DEFAULT_MATRIX = os.path.join(
+    RESULTS_DIR, "starsolo", "Solo.out", "Gene", "filtered"
+)
 
 
 # -----------------------------------------------------------------------------

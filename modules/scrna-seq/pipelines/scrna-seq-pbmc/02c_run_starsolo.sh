@@ -20,7 +20,11 @@ STAR_BIN="${HOME}/bin/STAR"
 INDEX_DIR="${TUT}/ref/star_index"
 FASTQ_DIR="${TUT}/data/fastq/pbmc_1k_v3_fastqs"
 WL_DIR="${TUT}/ref/whitelist"
-OUT_DIR="${TUT}/results/starsolo"
+# Results are first-class project files. GHBIO_RESULTS is injected by the extension and
+# points at the project (~/ghbio-workspace/projects/<tutorial>/results). Falls back to the
+# legacy path (a symlink to the project) for manual runs.
+RESULTS="${GHBIO_RESULTS:-${TUT}/results}"
+OUT_DIR="${RESULTS}/starsolo"
 
 mkdir -p "${WL_DIR}" "${OUT_DIR}"
 

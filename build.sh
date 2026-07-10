@@ -10,7 +10,8 @@ node esbuild.mjs
 
 echo "==> package ghbio-coscientist.vsix (v$VER)"
 rm -rf .vsix-build && mkdir -p .vsix-build/extension
-cp -r package.json README.md LICENSE.txt dist media tutorials .vsix-build/extension/
+cp -r package.json README.md LICENSE.txt dist media modules .vsix-build/extension/
+[ -d tutorials ] && cp -r tutorials .vsix-build/extension/ || true
 cat > ".vsix-build/[Content_Types].xml" <<'XML'
 <?xml version="1.0" encoding="utf-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">

@@ -1,0 +1,145 @@
+import * as vscode from "vscode"
+import * as fs from "fs"
+import * as path from "path"
+import { runShellTask, tutorialProjectDir, tutorialResultsDir } from "./util"
+
+// =============================================================================
+// A pipeline as a DEEP MODULE engine.
+//
+// Design (Ousterhout): a *narrow* interface — run a pipeline end-to-end, resume
+// from a stage, query which stages are done, scaffold its project — over a *deep*
+// implementation that hides stage ordering, GHBIO_RESULTS injection, idempotency,
+// error-stop chaining, and the hand-off to AI. This engine is domain-agnostic: it
+// operates on a Pipeline value it is handed. The module registry (modules.ts)
+// decides WHICH pipelines exist; this file knows only how to RUN one.
+// =============================================================================
+
+export type StageKind = "env" | "data" | "build" | "compute" | "ai" | "report" | "task"
+
+export interface Stage {
+  id: string
+  title: string
+  ko?: string
+  kind: StageKind | "task" | "ai"
+  run?: string // shell command, relative to the pipeline dir
+  produces?: string[] // artifacts (relative to results/) that mark this stage complete
+  desc?: string
+}
+
+export interface Pipeline {
+  id: string
+  name: string
+  summary?: string
+  dir: string
+  stages: Stage[]
+}
+
+// Parse a pipeline folder. Accepts pipeline.json (preferred) or the legacy
+// tutorial.json, and steps under either "stages" or the legacy "steps" key.
+export function loadPipelineFromDir(dir: string): Pipeline | undefined {
+  for (const fn of ["pipeline.json", "tutorial.json"]) {
+    const f = path.join(dir, fn)
+    if (!fs.existsSync(f)) continue
+    try {
+      const m = JSON.parse(fs.readFileSync(f, "utf8"))
+      return { id: m.id, name: m.name, summary: m.summary, dir, stages: m.stages ?? m.steps ?? [] }
+    } catch (e) {
+      vscode.window.showErrorMessage(`GHBIO: bad ${fn} in ${path.basename(dir)}: ${e}`)
+      return undefined
+    }
+  }
+  return undefined
+}
+
+// A stage is "done" when every artifact it declares exists in the project results dir.
+// Stages without declared artifacts (env/download/build) are untracked → undefined.
+export function isStageDone(pipelineId: string, produces?: string[]): boolean | undefined {
+  if (!produces?.length) return undefined
+  const results = tutorialResultsDir(pipelineId)
+  return produces.every((rel) => fs.existsSync(path.join(results, rel)))
+}
+
+export function stageStatus(p: Pipeline): Record<string, boolean | undefined> {
+  const out: Record<string, boolean | undefined> = {}
+  for (const s of p.stages) out[s.id] = isStageDone(p.id, s.produces)
+  return out
+}
+
+// Ensure the pipeline's project exists (results dir + notes) so its outputs are
+// first-class files under Projects/<id>/. Returns the results dir to write into.
+export function ensureProject(p: { id: string; name: string; summary?: string }): string {
+  const projectDir = tutorialProjectDir(p.id)
+  const resultsDir = tutorialResultsDir(p.id)
+  fs.mkdirSync(resultsDir, { recursive: true })
+  const notes = path.join(projectDir, "notes.md")
+  if (!fs.existsSync(notes)) {
+    fs.writeFileSync(
+      notes,
+      `# ${p.name}\n\n${p.summary ?? "GHBIO analysis project."}\n\n` +
+        `- \`results/\` — figures, tables, reports (the pipeline writes here)\n` +
+        `- Shared heavy inputs are reused across projects under \`~/ghbio-tutorial/\`.\n`,
+    )
+  }
+  return resultsDir
+}
+
+// Wrap one shell stage with the same ▶ banner the per-step runner uses.
+function stageBlock(s: Stage): string {
+  const title = s.title.replace(/"/g, "")
+  return (
+    `printf "\\n\\033[1;36m▶ %s\\033[0m\\n" "${title}"; ` +
+    `echo "  실행 중… 끝나면 ✅ 표시가 나옵니다."; ` +
+    `{ ${s.run}; }`
+  )
+}
+
+/**
+ * The narrow interface: run a pipeline end-to-end (or resume from a stage) with ONE
+ * call. Runs every shell stage sequentially in a single integrated-terminal task —
+ * stopping on the first failure — then hands off to AI once results exist.
+ */
+export async function runPipeline(
+  context: vscode.ExtensionContext,
+  p: Pipeline,
+  opts: { from?: string; openAI?: () => void; readyFile?: string } = {},
+) {
+  const resultsDir = ensureProject(p)
+
+  // Select the shell stages to run: from `from` (or the start) up to the AI stage.
+  let start = 0
+  if (opts.from) {
+    const i = p.stages.findIndex((s) => s.id === opts.from)
+    if (i >= 0) start = i
+  }
+  const chain: Stage[] = []
+  let hasAI = false
+  for (const s of p.stages.slice(start)) {
+    if (s.kind === "ai") {
+      hasAI = true
+      break // the AI stage is interactive — stop the shell chain here
+    }
+    if (s.run) chain.push(s)
+  }
+  if (chain.length === 0) {
+    if (hasAI) opts.openAI?.()
+    return
+  }
+
+  const body =
+    chain.map(stageBlock).join(" && \\\n") +
+    ` && printf "\\n\\033[1;32m✅ 전체 분석 완료 — 결과는 Projects/${p.id}/results 에 있습니다.\\033[0m\\n"` +
+    ` || printf "\\n\\033[1;31m⚠ 파이프라인이 중간에 멈췄습니다. 위의 마지막 메시지를 확인하세요.\\033[0m\\n"`
+
+  const exec = await runShellTask(`GHBIO: ${p.name}`, body, p.dir, { GHBIO_RESULTS: resultsDir })
+
+  // When the analysis has produced its "ready" artifact, hand off to the AI panel.
+  const readyFile = opts.readyFile ?? "markers_by_cluster.csv"
+  if (hasAI && opts.openAI) {
+    const done = vscode.tasks.onDidEndTask((e) => {
+      if (e.execution !== exec) return
+      done.dispose()
+      if (fs.existsSync(path.join(resultsDir, readyFile))) opts.openAI!()
+    })
+    context.subscriptions.push(done)
+  }
+}

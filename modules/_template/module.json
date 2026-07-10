@@ -1,0 +1,31 @@
+{
+  "id": "protein-3d",
+  "name": "Protein 3D modeling",
+  "icon": "symbol-structure",
+  "description": "Sequence → structure prediction → analysis → AI interpretation",
+
+  "//": "COPY THIS FOLDER to modules/<your-id>/ (drop the leading underscore) to add a new domain.",
+  "//icon": "Any VS Code product icon name: https://microsoft.github.io/vscode-codicons/ (e.g. beaker, symbol-structure, graph, microscope).",
+
+  "libraries": [
+    {
+      "id": "env",
+      "name": "Python env",
+      "desc": "Conda/venv with the domain's tools",
+      "presentPath": "~/ghbio-venv-protein/bin/python",
+      "install": { "pipeline": "predict-structure", "script": "00_setup_env.sh", "label": "Install tools" }
+    }
+  ],
+
+  "ai": {
+    "intro": "예측 구조·지표를 LLM에 보내 해석·가설을 받습니다.",
+    "system": "You are the GHBIO AI Co-Scientist for protein structure. Answer the user's ONE question using the provided structure metrics. Be concise and rigorous. Reply in Korean unless asked otherwise.",
+    "readyFile": "metrics.csv",
+    "readyHint": "결과 파일이 없습니다. 먼저 구조 예측 단계를 실행해 metrics.csv 를 만들어 주세요.",
+    "context": [{ "file": "metrics.csv", "heading": "Structure metrics (metrics.csv)" }],
+    "prompts": [
+      { "key": "interpret", "label": "Interpret confidence", "q": "pLDDT/PAE 등 신뢰도 지표를 해석하고 신뢰할 수 있는 도메인과 애매한 영역을 표시해줘." },
+      { "key": "hypothesis", "label": "Testable hypotheses", "q": "예측 구조를 근거로 기능·상호작용에 대한 검증 가능한 가설 3~5개를 제시해줘." }
+    ]
+  }
+}

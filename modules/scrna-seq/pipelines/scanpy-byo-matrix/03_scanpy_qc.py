@@ -40,10 +40,15 @@ import matplotlib.pyplot as plt  # noqa: E402
 # Paths / 경로
 # -----------------------------------------------------------------------------
 HOME = os.path.expanduser("~")
-DEFAULT_MATRIX = os.path.join(
-    HOME, "ghbio-tutorial", "results", "starsolo", "Solo.out", "Gene", "filtered"
+# Results are first-class project files. GHBIO_RESULTS is injected by the extension and
+# points at the project (~/ghbio-workspace/projects/<pipeline>/results). Falls back to the
+# legacy path (a symlink to the project) for manual runs.
+RESULTS_DIR = os.environ.get(
+    "GHBIO_RESULTS", os.path.join(HOME, "ghbio-tutorial", "results")
 )
-RESULTS_DIR = os.path.join(HOME, "ghbio-tutorial", "results")
+DEFAULT_MATRIX = os.path.join(
+    RESULTS_DIR, "starsolo", "Solo.out", "Gene", "filtered"
+)
 
 
 # -----------------------------------------------------------------------------
@@ -94,7 +99,9 @@ def load_matrix(matrix_path):
     if not os.path.isdir(matrix_path):
         sys.exit(
             f"ERROR: matrix directory not found: {matrix_path}\n"
-            "Run 02c_run_starsolo.sh first, or pass --matrix <dir>."
+            "This pipeline uses your OWN 10x matrix (it skips STARsolo).\n"
+            "Put a filtered matrix dir (matrix.mtx(.gz), barcodes.tsv(.gz), "
+            "features.tsv(.gz)) at ~/ghbio-workspace/my_matrix, or pass --matrix <dir>."
         )
     print(f"==> Loading 10x matrix from: {matrix_path}")
     # Newer scanpy's read_10x_mtx expects GZIPPED MEX (matrix.mtx.gz). STARsolo

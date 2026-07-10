@@ -19,7 +19,7 @@ set -euo pipefail
 # Requires: pandoc, wkhtmltopdf, and the venv python (~/ghbio-venv).
 # =============================================================================
 
-RESULTS="${HOME}/ghbio-tutorial/results"
+RESULTS="${GHBIO_RESULTS:-${HOME}/ghbio-tutorial/results}"
 AUTHOR="${GHBIO_REPORT_AUTHOR:-GHBIO Bioinformatics}"
 SAMPLE="10x Genomics 1k PBMC (v3)"
 OUT=""
@@ -44,10 +44,13 @@ for tool in pandoc wkhtmltopdf; do
   command -v "$tool" >/dev/null 2>&1 || { echo "ERROR: '$tool' not found." >&2; exit 1; }
 done
 [[ -x "$PY" ]] || { echo "ERROR: venv python not found at $PY (run 00_setup_env.sh)." >&2; exit 1; }
-for f in step4_ai_report_easy.md step4_ai_report.md markers_by_cluster.csv \
-         celltype_draft.csv umap_clusters.png qc_violin.png; do
-  [[ -f "${RESULTS}/${f}" ]] || { echo "ERROR: missing ${RESULTS}/${f} (run Steps 3-4 first)." >&2; exit 1; }
+# QC-derived artifacts are required (produced by 03_scanpy_qc.py).
+for f in markers_by_cluster.csv celltype_draft.csv umap_clusters.png qc_violin.png; do
+  [[ -f "${RESULTS}/${f}" ]] || { echo "ERROR: missing ${RESULTS}/${f} (run the QC/clustering step first)." >&2; exit 1; }
 done
+# The Step-4 AI write-ups are OPTIONAL: the AI panel doesn't auto-save them, so the
+# report builds from the QC outputs and folds the AI sections in only when present.
+# (Save an AI answer as step4_ai_report_easy.md / step4_ai_report.md to include it.)
 
 REPORT_DATE="$(date +%Y-%m-%d)"
 TMP="$(mktemp -d)"
@@ -86,13 +89,18 @@ figcaption { font-size: 9.5pt; color: #475569; margin-top: 6px; }
 td.mono { font-family: "DejaVu Sans Mono",monospace; font-size: 9pt; }
 CSS
 
-# --- 2. Markdown -> HTML fragments -------------------------------------------
-pandoc "${RESULTS}/step4_ai_report_easy.md" -f gfm -t html5 -o "$TMP/easy.html"
-pandoc "${RESULTS}/step4_ai_report.md"      -f gfm -t html5 -o "$TMP/expert.html"
+# --- 2. Markdown -> HTML fragments (only for the AI write-ups that exist) -----
+EASY_HTML=""; EXP_HTML=""
+if [[ -f "${RESULTS}/step4_ai_report_easy.md" ]]; then
+  pandoc "${RESULTS}/step4_ai_report_easy.md" -f gfm -t html5 -o "$TMP/easy.html"; EASY_HTML="$TMP/easy.html"
+fi
+if [[ -f "${RESULTS}/step4_ai_report.md" ]]; then
+  pandoc "${RESULTS}/step4_ai_report.md"      -f gfm -t html5 -o "$TMP/expert.html"; EXP_HTML="$TMP/expert.html"
+fi
 
 # --- 3. Assemble full HTML (cover + figures + reports + appendix) + render ----
 RESULTS="$RESULTS" AUTHOR="$AUTHOR" SAMPLE="$SAMPLE" REPORT_DATE="$REPORT_DATE" \
-LOGO="$LOGO" TMP="$TMP" "$PY" - <<'PY'
+LOGO="$LOGO" TMP="$TMP" EASY_HTML="$EASY_HTML" EXP_HTML="$EXP_HTML" "$PY" - <<'PY'
 import os, base64, csv, html, collections
 R, TMP = os.environ["RESULTS"], os.environ["TMP"]
 def b64(p): return base64.b64encode(open(p,'rb').read()).decode()
@@ -147,8 +155,16 @@ figs = f"""<div class="pagebreak"></div><h1>분석 결과 그림 (Figures)</h1>
 <figcaption>Figure 2. QC 지표 — 세포당 유전자 수 / 총 UMI / 미토콘드리아 비율(%)</figcaption></figure>"""
 
 css  = open(os.path.join(TMP,"ghbio.css")).read()
-easy = open(os.path.join(TMP,"easy.html")).read()
-exp  = open(os.path.join(TMP,"expert.html")).read()
+def _ai_section(env_key, title):
+    p = os.environ.get(env_key)
+    if p and os.path.exists(p):
+        return open(p).read()
+    return (f"<h1>{title}</h1><blockquote>AI 해석 리포트가 아직 저장되지 않았습니다. "
+            "AI 분석 단계에서 답변을 <code>step4_ai_report_easy.md</code> / "
+            "<code>step4_ai_report.md</code> 로 저장한 뒤 리포트를 다시 생성하면 이 섹션이 채워집니다."
+            "</blockquote>")
+easy = _ai_section("EASY_HTML", "AI 해석 (쉬운 설명)")
+exp  = _ai_section("EXP_HTML", "AI 해석 (전문가)")
 html_doc = (f'<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">'
     f'<style>{css}</style></head><body>{cover}{figs}'
     f'<div class="pagebreak"></div>{easy}'

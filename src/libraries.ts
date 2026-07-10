@@ -1,76 +1,77 @@
 import * as vscode from "vscode"
 import * as fs from "fs"
-import * as os from "os"
-import * as path from "path"
-import { runShellTask, tutorialsDir } from "./util"
+import { runShellTask, expandHome } from "./util"
+import { Module, LibrarySpec, loadModules, findPipeline } from "./modules"
 
-// The bioinformatics "libraries" (tools/refs) the scRNA-seq pipeline needs.
-// Each has a presence check and an install/build action (runs a tutorial script).
-interface Lib {
-  id: string
-  name: string
-  desc: string
-  present: () => boolean
-  install: { script: string; label: string } // script relative to the pbmc tutorial dir
+// The tools/refs each module needs, read from module.json (no hardcoding). Each
+// library has a presence check (presentPath exists?) and an install action that
+// runs one of the module's pipeline scripts.
+type LibNode =
+  | { kind: "moduleHeader"; m: Module }
+  | { kind: "lib"; m: Module; lib: LibrarySpec }
+
+function present(lib: LibrarySpec): boolean {
+  return fs.existsSync(expandHome(lib.presentPath))
 }
 
-function home(...p: string[]) {
-  return path.join(os.homedir(), ...p)
-}
-
-const LIBS: Lib[] = [
-  {
-    id: "venv",
-    name: "Python / Scanpy",
-    desc: "~/ghbio-venv (scanpy, anndata, leiden, umap)",
-    present: () => fs.existsSync(home("ghbio-venv", "bin", "python")),
-    install: { script: "00_setup_env.sh", label: "Install Python stack" },
-  },
-  {
-    id: "star",
-    name: "STAR / STARsolo",
-    desc: "~/bin/STAR (aligner, built from source)",
-    present: () => fs.existsSync(home("bin", "STAR")),
-    install: { script: "02a_build_starsolo.sh", label: "Build STAR" },
-  },
-  {
-    id: "reference",
-    name: "GRCh38 reference + index",
-    desc: "~/ghbio-tutorial/ref/star_index (~30 GB, one-time)",
-    present: () => fs.existsSync(home("ghbio-tutorial", "ref", "star_index", "SAindex")),
-    install: { script: "02b_reference.sh", label: "Download + build index" },
-  },
-]
-
-export class LibraryProvider implements vscode.TreeDataProvider<Lib> {
+export class LibraryProvider implements vscode.TreeDataProvider<LibNode> {
   private _onDidChange = new vscode.EventEmitter<void>()
   readonly onDidChangeTreeData = this._onDidChange.event
-  constructor(private context: vscode.ExtensionContext) {}
+  private modules: Module[] = []
+  constructor(private context: vscode.ExtensionContext) {
+    this.refresh()
+  }
   refresh() {
+    this.modules = loadModules(this.context)
     this._onDidChange.fire()
   }
-  getTreeItem(l: Lib): vscode.TreeItem {
-    const ok = l.present()
-    const it = new vscode.TreeItem(l.name, vscode.TreeItemCollapsibleState.None)
+
+  getTreeItem(n: LibNode): vscode.TreeItem {
+    if (n.kind === "moduleHeader") {
+      const it = new vscode.TreeItem(n.m.name, vscode.TreeItemCollapsibleState.Expanded)
+      it.iconPath = new vscode.ThemeIcon(n.m.icon ?? "package")
+      it.contextValue = "moduleHeader"
+      return it
+    }
+    const ok = present(n.lib)
+    const it = new vscode.TreeItem(n.lib.name, vscode.TreeItemCollapsibleState.None)
     it.description = ok ? "installed" : "not installed"
-    it.tooltip = l.desc
+    it.tooltip = n.lib.desc
     it.iconPath = new vscode.ThemeIcon(
       ok ? "pass-filled" : "circle-large-outline",
       ok ? new vscode.ThemeColor("charts.green") : undefined,
     )
     it.contextValue = "library"
+    it.id = `${n.m.id}/${n.lib.id}`
     return it
   }
-  getChildren(): Lib[] {
-    return LIBS
+
+  getChildren(n?: LibNode): LibNode[] {
+    const withLibs = this.modules.filter((m) => m.libraries?.length)
+    if (!n) {
+      if (withLibs.length > 1) return withLibs.map((m) => ({ kind: "moduleHeader", m }) as LibNode)
+      const m = withLibs[0]
+      return m ? m.libraries!.map((lib) => ({ kind: "lib", m, lib }) as LibNode) : []
+    }
+    if (n.kind === "moduleHeader") return n.m.libraries!.map((lib) => ({ kind: "lib", m: n.m, lib }) as LibNode)
+    return []
   }
-  libFor(id: string) {
-    return LIBS.find((l) => l.id === id)
+
+  // Resolve a tree item id ("<moduleId>/<libId>") back to its module + library.
+  find(id: string): { m: Module; lib: LibrarySpec } | undefined {
+    const [mid, lid] = id.split("/")
+    const m = this.modules.find((x) => x.id === mid)
+    const lib = m?.libraries?.find((l) => l.id === lid)
+    return m && lib ? { m, lib } : undefined
   }
 }
 
-export async function installLibrary(context: vscode.ExtensionContext, l: Lib) {
-  // Libraries install via the scrna-seq-pbmc tutorial scripts.
-  const dir = path.join(tutorialsDir(context), "scrna-seq-pbmc")
-  await runShellTask(`GHBIO: ${l.install.label}`, `bash ${l.install.script}`, dir)
+export async function installLibrary(context: vscode.ExtensionContext, m: Module, lib: LibrarySpec) {
+  // The install script lives in one of the module's pipeline folders.
+  const found = findPipeline([m], lib.install.pipeline)
+  if (!found) {
+    vscode.window.showErrorMessage(`GHBIO: install pipeline "${lib.install.pipeline}" not found in module ${m.id}.`)
+    return
+  }
+  await runShellTask(`GHBIO: ${lib.install.label}`, `bash ${lib.install.script}`, found.pipeline.dir)
 }

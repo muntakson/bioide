@@ -21,8 +21,10 @@ export function openHome(context: vscode.ExtensionContext, tutorials: TutorialPr
 
 function render(p: vscode.WebviewPanel, tutorials: TutorialProvider) {
   const items = tutorials
-    .getTutorials()
-    .map((t) => `<li><b>${esc(t.name)}</b> — ${esc(t.summary ?? "")}</li>`)
+    .getModules()
+    .flatMap((m) =>
+      m.pipelines.map((pl) => `<li><b>${esc(m.name)}</b> · ${esc(pl.name)} — ${esc(pl.summary ?? "")}</li>`),
+    )
     .join("")
   p.webview.html = /* html */ `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
@@ -47,17 +49,23 @@ function render(p: vscode.WebviewPanel, tutorials: TutorialProvider) {
   <h1>GHBIO <span class="a">Co-Scientist</span></h1>
   <div class="sub">scRNA-seq bioinformatics workbench · projects · libraries · tutorials · AI analysis</div>
   <div class="grid">
-    <div class="card"><h3>🧬 Run the tutorial</h3>
-      <p>FASTQ → count matrix → clustering → AI hypotheses, step by step in the terminal.</p>
-      <button onclick="send('workbench.view.extension.ghbio')">Open Tutorials</button></div>
+    <div class="card"><h3>🚀 Run full scRNA-seq analysis</h3>
+      <p>One click runs the whole pipeline — FASTQ → count matrix → clustering — then opens AI analysis. Results land in your project.</p>
+      <button onclick="send('ghbio.runPipeline')">전체 분석 실행</button></div>
+    <div class="card"><h3>🧬 Run step by step</h3>
+      <p>Prefer to learn each stage? Run the pipeline one step at a time in the terminal.</p>
+      <button class="ghost" onclick="send('workbench.view.extension.ghbio')">Open Tutorials</button></div>
     <div class="card"><h3>🤖 AI Analysis</h3>
       <p>Send your cluster markers &amp; cell types to the LLM and get interpretation + hypotheses. One shot, no wandering.</p>
       <button onclick="send('ghbio.openAI')">Open AI panel</button></div>
     <div class="card"><h3>📁 New project</h3>
       <p>Scaffold a fresh analysis project (data/, results/, notes).</p>
       <button class="ghost" onclick="send('ghbio.newProject')">New project</button></div>
+    <div class="card"><h3>❓ 사용설명서</h3>
+      <p>처음 쓰시나요? 로그인부터 예제 분석까지 쉬운 한국어로 하나하나 설명합니다.</p>
+      <button onclick="send('ghbio.openHelp')">사용설명서 열기</button></div>
   </div>
-  <h3 style="margin-top:26px">Installed tutorials</h3>
+  <h3 style="margin-top:26px">Installed modules &amp; pipelines</h3>
   <ul>${items || "<li>(none found)</li>"}</ul>
   <div class="foot">GHBIO AI Co-Scientist · <a href="https://ghbio.co.kr/ghbio/sub0401.php">ghbio.co.kr</a></div>
   <script>

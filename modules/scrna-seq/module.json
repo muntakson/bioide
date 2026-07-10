@@ -1,0 +1,46 @@
+{
+  "id": "scrna-seq",
+  "name": "Single-cell RNA-seq",
+  "icon": "beaker",
+  "description": "FASTQ → count matrix → clustering → AI hypotheses (Scanpy / STARsolo)",
+  "libraries": [
+    {
+      "id": "venv",
+      "name": "Python / Scanpy",
+      "desc": "~/ghbio-venv (scanpy, anndata, leiden, umap)",
+      "presentPath": "~/ghbio-venv/bin/python",
+      "install": { "pipeline": "scrna-seq-pbmc", "script": "00_setup_env.sh", "label": "Install Python stack" }
+    },
+    {
+      "id": "star",
+      "name": "STAR / STARsolo",
+      "desc": "~/bin/STAR (aligner, built from source)",
+      "presentPath": "~/bin/STAR",
+      "install": { "pipeline": "scrna-seq-pbmc", "script": "02a_build_starsolo.sh", "label": "Build STAR" }
+    },
+    {
+      "id": "reference",
+      "name": "GRCh38 reference + index",
+      "desc": "~/ghbio-tutorial/ref/star_index (~30 GB, one-time)",
+      "presentPath": "~/ghbio-tutorial/ref/star_index/SAindex",
+      "install": { "pipeline": "scrna-seq-pbmc", "script": "02b_reference.sh", "label": "Download + build index" }
+    }
+  ],
+  "ai": {
+    "intro": "클러스터 마커·세포타입을 LLM에 보내 해석·가설을 받습니다. 단발성 요청이라 파일을 수정하거나 배회하지 않습니다.",
+    "system": "You are the GHBIO AI Co-Scientist, a careful single-cell RNA-seq analyst. Answer the user's ONE question directly using the provided cluster markers and draft cell types. Be concise, structured (headings, tables, short lists), and rigorous. Do NOT run code or ask to; just interpret. Reply in Korean unless asked otherwise.",
+    "readyFile": "markers_by_cluster.csv",
+    "context": [
+      { "file": "celltype_draft.csv", "heading": "Draft cell-type annotation (celltype_draft.csv)" },
+      { "file": "markers_by_cluster.csv", "heading": "Top markers per cluster (markers_by_cluster.csv, top10)", "topByRank": 10 }
+    ],
+    "readyHint": "결과 파일이 없습니다. 먼저 QC/clustering 단계(Scanpy)를 실행해 markers_by_cluster.csv / celltype_draft.csv 를 만들어 주세요.",
+    "prompts": [
+      { "key": "interpret", "label": "Interpret each cluster", "q": "각 cluster의 세포 정체성과 활성화 상태를 top marker로 해석하고 confidence와 애매/doublet 의심 cluster를 표시해줘." },
+      { "key": "annotate", "label": "Refine cell-type annotation", "q": "PBMC canonical marker(CD3D/CD3E, CD8A, IL7R, MS4A1/CD79A, NKG7/GNLY, CD14/LYZ, FCGR3A/MS4A7, FCER1A, PPBP)를 이용해 cluster별 cell type을 다듬고 근거 유전자와 함께 최종 표를 만들어줘." },
+      { "key": "pathway", "label": "Pathway / functional", "q": "관심 cluster의 marker들을 주요 pathway/생물학적 프로그램으로 묶어 기능적 의미를 설명하고 enrichment로 검증할 gene set을 제안해줘." },
+      { "key": "hypothesis", "label": "Testable hypotheses", "q": "marker·annotation·pathway를 근거로 검증 가능한 가설 3~5개를 제시하고 각 가설의 근거·예측·검증 방법을 알려줘." },
+      { "key": "questions", "label": "Analysis question list", "q": "이 데이터로 이어서 수행할 후속 분석 질문 약 8~10개를 과학적 가치·실행가능성 순으로 우선순위를 매겨 목록으로 만들고 각 항목에 한 줄 방법 메모를 붙여줘." }
+    ]
+  }
+}

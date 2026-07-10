@@ -37,6 +37,37 @@ journalctl --user -u ghbio-code -n 50 --no-pager
 - Keys: **`~/.config/ghbio/providers.json`** (`{ "anthropic": {"apiKey": "..."}, ... }`, chmod 600).
 - It reads `~/ghbio-tutorial/results/{markers_by_cluster,celltype_draft}.csv`, so run tutorial Step 3 first.
 
+## The scRNA-seq pipeline as a Deep Module (`src/pipeline.ts`)
+- The scRNA-seq analysis is the app's **core deep module**: a narrow interface —
+  `runPipeline()` (run all / resume `from` a stage), `stageStatus()`/`isStageDone()`,
+  `loadPipeline()`, `ensureProject()` — over a deep implementation that hides stage
+  ordering, project scaffolding, `GHBIO_RESULTS` injection, idempotency, and the AI hand-off.
+- Every surface builds on this one interface: the **Tutorials tree** (per-step runs +
+  ✓ done markers via `isStageDone`), the **▶▶ Run-full button** (`ghbio.runPipeline`),
+  Home, and the welcome view. A future **HTTP endpoint** should call the same functions —
+  it is the intended skeleton for "AI-as-a-webservice", so keep UI (vscode) out of the core.
+- Pipeline spec = `tutorials/<id>/tutorial.json`; each stage may declare `produces: [...]`
+  (result artifacts, relative to `results/`) that mark it complete. `CORE_PIPELINE_ID`
+  designates the default pipeline (`scrna-seq-pbmc`); drop in more via `loadPipeline(id)`.
+- **Results are first-class project files:** outputs live in
+  `~/ghbio-workspace/projects/<id>/results/` (shown in the Projects view). The legacy
+  `~/ghbio-tutorial/results` is a **symlink** to the project; scripts honor `GHBIO_RESULTS`
+  and fall back to that path. Heavy inputs (FASTQ, GRCh38 index) stay shared under
+  `~/ghbio-tutorial/` and are surfaced in the project via `inputs-fastq`/`reference-grch38` symlinks.
+
+## Disabling the built-in Copilot / "Build with Agent" chat
+Users are biologists with no Copilot subscription, and Copilot can't run on code-server anyway —
+the native chat only produced a "Sign in to use GitHub Copilot" wall. It's disabled two ways
+(both **outside the repo**, so re-apply after a code-server upgrade):
+- **User settings** `~/.local/share/code-server/User/settings.json` (backup: `settings.json.bak`):
+  `"chat.disableAIFeatures": true`, `"chat.agent.enabled": false`, `"chat.commandCenter.enabled": false`.
+- **product.json** `~/.local/lib/code-server-<ver>/lib/vscode/product.json` (backup: `product.json.ghbio-bak`):
+  removed the `defaultChatAgent` key (pointed at `GitHub.copilot`), so the setup flow has no agent.
+
+All AI goes through the GHBIO **AI Analysis** panel instead (the user's own GROQ/Anthropic key).
+The panel answers **free-form questions anytime** (e.g. "what is FASTQ?") — results are attached as
+context only for the preset prompts / when present.
+
 ## Add a new tutorial (PlatformIO-library style)
 1. `mkdir ~/ghbio-coscientist/tutorials/<id>/`; add `tutorial.json`
    (`{ id, name, summary, steps:[{ id, title, ko, kind:"task"|"ai", run }] }`) + any scripts.
