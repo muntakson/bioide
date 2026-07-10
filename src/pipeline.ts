@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import * as fs from "fs"
 import * as path from "path"
-import { runShellTask, tutorialProjectDir, tutorialResultsDir } from "./util"
+import { runShellTask, tutorialProjectDir, tutorialResultsDir, expandHome } from "./util"
 
 // =============================================================================
 // A pipeline as a DEEP MODULE engine.
@@ -23,7 +23,18 @@ export interface Stage {
   kind: StageKind | "task" | "ai"
   run?: string // shell command, relative to the pipeline dir
   produces?: string[] // artifacts (relative to results/) that mark this stage complete
+  presentPath?: string // ~-expanded ABSOLUTE path; exists ⇒ complete. For outputs that live
+  // outside results/ (e.g. downloaded FASTQ under the shared ~/ghbio-tutorial/ input dir).
   desc?: string
+}
+
+// Optional, data-driven help content for the context-aware 사용설명서 (help.ts).
+// Everything domain-specific about a tutorial's help lives here, not in TypeScript,
+// so a new pipeline gets its own tailored help by dropping JSON into pipeline.json.
+export interface PipelineHelp {
+  intro?: string // ko paragraph: what this dataset is and what you'll experience
+  steps?: Record<string, string> // stageId → friendly ko description shown in the walkthrough
+  glossary?: { term: string; def: string }[] // domain-specific terms appended to the shared glossary
 }
 
 export interface Pipeline {
@@ -32,6 +43,7 @@ export interface Pipeline {
   summary?: string
   dir: string
   stages: Stage[]
+  help?: PipelineHelp
 }
 
 // Parse a pipeline folder. Accepts pipeline.json (preferred) or the legacy
@@ -42,7 +54,7 @@ export function loadPipelineFromDir(dir: string): Pipeline | undefined {
     if (!fs.existsSync(f)) continue
     try {
       const m = JSON.parse(fs.readFileSync(f, "utf8"))
-      return { id: m.id, name: m.name, summary: m.summary, dir, stages: m.stages ?? m.steps ?? [] }
+      return { id: m.id, name: m.name, summary: m.summary, dir, stages: m.stages ?? m.steps ?? [], help: m.help }
     } catch (e) {
       vscode.window.showErrorMessage(`GHBIO: bad ${fn} in ${path.basename(dir)}: ${e}`)
       return undefined
@@ -57,6 +69,31 @@ export function isStageDone(pipelineId: string, produces?: string[]): boolean | 
   if (!produces?.length) return undefined
   const results = tutorialResultsDir(pipelineId)
   return produces.every((rel) => fs.existsSync(path.join(results, rel)))
+}
+
+// True when a stage's `presentPath` (absolute output outside results/) exists.
+export function isStagePresent(s: Stage): boolean | undefined {
+  if (!s.presentPath) return undefined
+  return fs.existsSync(expandHome(s.presentPath))
+}
+
+// Whether the app can track this stage's completion at all (produces OR presentPath).
+export function stageTracked(s: Stage): boolean {
+  return !!(s.produces?.length || s.presentPath)
+}
+
+// Combined completion across both mechanisms. undefined ⇒ untracked (can't tell).
+export function stageComplete(pipelineId: string, s: Stage): boolean | undefined {
+  const a = isStageDone(pipelineId, s.produces)
+  const b = isStagePresent(s)
+  if (a === undefined && b === undefined) return undefined
+  return a === true || b === true
+}
+
+// done/total over the stages whose completion we can actually track.
+export function pipelineProgress(p: Pipeline): { done: number; total: number } {
+  const tracked = p.stages.filter(stageTracked)
+  return { done: tracked.filter((s) => stageComplete(p.id, s) === true).length, total: tracked.length }
 }
 
 export function stageStatus(p: Pipeline): Record<string, boolean | undefined> {

@@ -1,9 +1,20 @@
 import * as vscode from "vscode"
+import { Pipeline } from "./pipeline"
+import { loadModules, findPipeline, defaultPipeline } from "./modules"
 
 let panel: vscode.WebviewPanel | undefined
 
-export function openHelp(context: vscode.ExtensionContext) {
+// The help is CONTEXT-AWARE: the shared "basic help" chrome is always shown, and
+// the tutorial-specific parts (dataset blurb, step walkthrough, glossary, result
+// folder) are rendered from whichever pipeline is currently active. Passing a new
+// activePipelineId re-renders an already-open panel so switching tutorials updates it.
+export function openHelp(context: vscode.ExtensionContext, activePipelineId?: string) {
+  const modules = loadModules(context)
+  const resolved = (activePipelineId && findPipeline(modules, activePipelineId)) || defaultPipeline(modules)
+  const pipe = resolved?.pipeline
+
   if (panel) {
+    panel.webview.html = html(pipe)
     panel.reveal()
     return
   }
@@ -15,10 +26,46 @@ export function openHelp(context: vscode.ExtensionContext) {
   panel.webview.onDidReceiveMessage((m) => {
     if (m?.cmd) vscode.commands.executeCommand(m.cmd, ...(m.args ?? []))
   })
-  panel.webview.html = html()
+  panel.webview.html = html(pipe)
 }
 
-function html(): string {
+const esc = (t: unknown) =>
+  String(t ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+
+// Badge = the leading token of a step title ("2a. Build STARsolo" → "2a").
+const badgeOf = (title: string) => (title.split(".")[0] || "•").trim()
+
+// Build section 4's step walkthrough from the active pipeline's stages. Step
+// descriptions come from pipeline.json `help.steps` (friendly ko, may contain HTML),
+// falling back to the stage's own `desc`. Titles use the stage's Korean label.
+function stepCards(pipe?: Pipeline): string {
+  if (!pipe?.stages?.length) return ""
+  return pipe.stages
+    .map((s) => {
+      const badge = esc(badgeOf(s.title))
+      const title = esc(s.ko || s.title)
+      const desc = pipe.help?.steps?.[s.id] ?? s.desc ?? "" // trusted HTML from our own manifest
+      return (
+        `<div class="step"><div class="head"><div class="badge">${badge}</div>` +
+        `<div class="title">${title}</div></div>${desc ? `<p>${desc}</p>` : ""}</div>`
+      )
+    })
+    .join("\n")
+}
+
+function html(pipe?: Pipeline): string {
+  const tutName = esc(pipe?.name ?? "scRNA-seq")
+  const projectId = esc(pipe?.id ?? "scrna-seq")
+  const intro =
+    pipe?.help?.intro ??
+    "<b>왼쪽 Pipelines 목록에서 각 단계를 위에서부터 하나씩 누르기만</b> 하면 됩니다."
+  const cards = stepCards(pipe)
+  const extraGlossary = (pipe?.help?.glossary ?? [])
+    .map((g) => `<dt>${esc(g.term)}</dt>\n    <dd>${g.def}</dd>`)
+    .join("\n    ")
   return /* html */ `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
@@ -79,6 +126,7 @@ function html(): string {
 
   <h1>GHBIO <span class="a">Co-Scientist</span> 사용설명서</h1>
   <p class="lead">생물학 연구자를 위한 단일세포 RNA 분석 도우미 · 처음 쓰는 분을 위한 쉬운 안내서</p>
+  <p class="lead" style="margin-top:6px">현재 튜토리얼: <b style="color:#2dd4bf">${tutName}</b> — 이 안내서의 <b>4번</b>과 <b>용어 사전</b>은 이 튜토리얼에 맞춰 표시됩니다.</p>
 
   <div class="note-top">
     이 프로그램은 <b>인터넷 브라우저(크롬 등) 안에서 열리는 분석 작업실</b>입니다.
@@ -197,12 +245,8 @@ function html(): string {
   </div>
 
   <!-- ============ 4 ============ -->
-  <h2 id="s4"><span class="num">4</span>튜토리얼(예제) 따라 하기 — 처음부터 끝까지</h2>
-  <p>
-    준비된 예제는 <b>“scRNA-seq PBMC (10x)”</b> 입니다.
-    사람 혈액 속 면역세포(PBMC) 공개 데이터를 가지고, 원본 서열부터 AI 해석까지 전 과정을 체험합니다.
-    <b>왼쪽 Pipelines 목록에서 각 단계를 위에서부터 하나씩 누르기만</b> 하면 됩니다.
-  </p>
+  <h2 id="s4"><span class="num">4</span>튜토리얼(예제) 따라 하기 — 처음부터 끝까지 <span style="font-size:15px;color:#7ee7d6">· ${tutName}</span></h2>
+  <p>${intro}</p>
   <div class="tip">
     <b>한 번에 다 돌리고 싶다면?</b> Pipelines 창 <b>맨 위 왼쪽의 ▶▶ (전체 실행) 버튼</b>을 누르세요.
     설치·다운로드·정렬·클러스터링까지 <b>순서대로 알아서 진행</b>하고, 끝나면 AI 분석 창이 자동으로 열립니다.
@@ -219,47 +263,11 @@ function html(): string {
     오래 걸려도 고장이 아니니 <b>기다려 주세요.</b> 창을 닫지 말고 그대로 두면 됩니다.
   </div>
 
-  <div class="step">
-    <div class="head"><div class="badge">0</div><div class="title">분석 환경(Scanpy) 설치</div></div>
-    <p>분석에 필요한 파이썬 도구들을 설치합니다. <b>처음 한 번만</b> 하면 됩니다.</p>
-  </div>
-  <div class="step">
-    <div class="head"><div class="badge">1</div><div class="title">공개 PBMC 데이터 내려받기</div></div>
-    <p>인터넷에서 예제용 혈액 면역세포 원본 서열 파일(FASTQ)을 자동으로 내려받습니다.</p>
-  </div>
-  <div class="step">
-    <div class="head"><div class="badge">2a</div><div class="title">정렬 프로그램(STARsolo) 준비</div></div>
-    <p>서열을 유전체에 맞춰 붙이는 프로그램을 이 컴퓨터에 맞게 준비(빌드)합니다. 한 번만 하면 됩니다.</p>
-  </div>
-  <div class="step">
-    <div class="head"><div class="badge">2b</div><div class="title">사람 유전체 색인 만들기</div></div>
-    <p>사람 표준 유전체(GRCh38)를 빠르게 찾을 수 있도록 색인(목차)을 만듭니다. 시간이 오래 걸리지만 한 번만 하면 됩니다.</p>
-  </div>
-  <div class="step">
-    <div class="head"><div class="badge">2c</div><div class="title">세포별 유전자 개수 표 만들기</div></div>
-    <p>서열을 유전체에 붙여서 <b>“어떤 세포에서 어떤 유전자가 몇 개 나왔는지”</b> 표(count matrix)를 만듭니다.</p>
-  </div>
-  <div class="step">
-    <div class="head"><div class="badge">3</div><div class="title">품질 검사 · 세포 묶기 (Scanpy)</div></div>
-    <p>
-      질 낮은 세포를 걸러내고(QC), 비슷한 세포끼리 묶어(클러스터링) 그림(UMAP)으로 그리고,
-      각 무리의 대표 유전자(marker)와 예상 세포 종류를 정리합니다.
-      이 단계가 끝나면 결과 파일 <code>markers_by_cluster.csv</code> 와 <code>celltype_draft.csv</code> 가 만들어집니다.
-    </p>
-    <div class="tip">
-      튜토리얼의 <b>모든 결과 파일(그림·표·리포트)</b>은 왼쪽 <b>Projects</b> 안의
-      <code>scrna-seq-pbmc</code> 프로젝트 <code>results</code> 폴더에 <b>실제 파일로</b> 저장됩니다.
-      Projects에서 그 프로젝트를 열면 결과를 바로 볼 수 있어요. (용량이 큰 원본 데이터·유전체는 공유 폴더에 따로 보관됩니다.)
-    </div>
-    <div class="warn"><b>이 단계를 꼭 먼저 끝내야</b> 다음 AI 분석을 쓸 수 있습니다. AI가 이 결과 파일을 읽어서 해석하기 때문입니다.</div>
-  </div>
-  <div class="step">
-    <div class="head"><div class="badge">4</div><div class="title">AI 해석 · 가설 제안</div></div>
-    <p>이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. 사용법은 바로 아래 5번에서 설명합니다.</p>
-  </div>
-  <div class="step">
-    <div class="head"><div class="badge">5</div><div class="title">PDF 보고서 만들기</div></div>
-    <p>지금까지의 그림·표·해석을 하나의 <b>PDF 보고서</b>로 정리합니다. 결과를 저장하거나 공유할 때 편리합니다.</p>
+  ${cards}
+  <div class="tip">
+    이 튜토리얼의 <b>모든 결과 파일(그림·표·리포트)</b>은 왼쪽 <b>Projects</b> 안의
+    <code>${projectId}</code> 프로젝트 <code>results</code> 폴더에 <b>실제 파일로</b> 저장됩니다.
+    Projects에서 그 프로젝트를 열면 결과를 바로 볼 수 있어요. (용량이 큰 원본 데이터·유전체는 공유 폴더에 따로 보관됩니다.)
   </div>
 
   <div style="margin-top:10px">
@@ -370,8 +378,7 @@ function html(): string {
     <dd>마커를 근거로 각 무리가 <b>어떤 세포(T세포·B세포 등)인지 이름을 붙이는 것</b>입니다.</dd>
     <dt>QC (품질 검사)</dt>
     <dd>죽었거나 이상한 세포를 걸러내어 <b>믿을 만한 세포만 남기는 정리 과정</b>입니다.</dd>
-    <dt>PBMC</dt>
-    <dd>혈액에서 뽑은 <b>면역세포 모음</b>입니다. 예제에서 쓰는 데이터가 이것입니다.</dd>
+    ${extraGlossary}
     <dt>확장 프로그램 (Extension)</dt>
     <dd>기본 작업실에 <b>기능을 더해주는 추가 부품</b>입니다. 이 <b>GHBIO Co-Scientist</b> 자체가 그런 부품이며, 이미 설치되어 있으니 <b>따로 신경 쓸 필요가 없습니다.</b></dd>
   </dl>

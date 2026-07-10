@@ -18,6 +18,22 @@ set -euo pipefail
 DATA_DIR="${HOME}/ghbio-tutorial/data/fastq"
 mkdir -p "${DATA_DIR}"
 
+# --- Single-instance guard: prevent concurrent duplicate downloads -----------
+# 중복 다운로드 방지 잠금장치.
+# Clicking "Step 1" twice (e.g. via the full pipeline AND the standalone step)
+# would start two curls writing to the SAME .tar file — wasting bandwidth and
+# risking a corrupted archive. flock lets only ONE download run at a time;
+# a second run aborts with a message instead of colliding with the first.
+# The lock is held on fd 9 for the life of this script and released on exit.
+LOCK_FILE="${DATA_DIR}/.pbmc_download.lock"
+exec 9>"${LOCK_FILE}"
+if ! flock -n 9; then
+  echo "==> 이미 PBMC 다운로드가 진행 중입니다 — 이 중복 실행을 건너뜁니다."
+  echo "==> A PBMC download is already running; skipping this duplicate run."
+  echo "    (진행 상황은 기존 창에서 확인하세요. / Watch the existing run for progress.)"
+  exit 1
+fi
+
 # --- Verified public download URL (10x Genomics CDN) -------------------------
 # 10x 공식 CDN의 검증된 다운로드 URL.
 FASTQ_URL="https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar"

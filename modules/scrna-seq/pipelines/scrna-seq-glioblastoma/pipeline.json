@@ -1,0 +1,33 @@
+{
+  "id": "scrna-seq-glioblastoma",
+  "name": "scRNA-seq Glioblastoma (10x)",
+  "summary": "사람 교모세포종(뇌종양) FASTQ → count matrix → clustering → AI 가설",
+  "deepModule": true,
+  "steps": [
+    { "id": "setup", "title": "0. Setup Python env", "ko": "분석 환경(Scanpy) 설치", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
+    { "id": "download", "title": "1. Download glioblastoma FASTQ", "ko": "공개 10x 교모세포종 데이터 (~19 GB)", "kind": "task", "run": "bash 01_download_glioblastoma.sh", "presentPath": "~/ghbio-tutorial/data/fastq/Parent_SC3v3_Human_Glioblastoma_fastqs" },
+    { "id": "build-star", "title": "2a. Install STAR aligner (compile)", "ko": "STAR 정렬 프로그램 설치 (소스 컴파일·ARM)", "kind": "task", "run": "bash 02a_build_starsolo.sh", "presentPath": "~/bin/STAR" },
+    { "id": "reference", "title": "2b. Build GRCh38 index (needs 2a)", "ko": "GRCh38 유전체 색인 생성 (2a 필요·PBMC와 공유·1회성)", "kind": "task", "run": "bash 02b_reference.sh", "presentPath": "~/ghbio-tutorial/ref/star_index/SAindex" },
+    { "id": "align", "title": "2c. Run STARsolo", "ko": "count matrix 생성", "kind": "task", "run": "bash 02c_run_starsolo.sh", "produces": ["starsolo/Solo.out/Gene/filtered/matrix.mtx"] },
+    { "id": "qc", "title": "3. QC & clustering (Scanpy)", "ko": "UMAP·marker·뇌종양 cell type", "kind": "task", "run": "~/ghbio-venv/bin/python 03_scanpy_qc.py", "produces": ["markers_by_cluster.csv", "celltype_draft.csv", "umap_clusters.png"] },
+    { "id": "ai", "title": "4. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 패널)", "kind": "ai" },
+    { "id": "report", "title": "5. Generate PDF report", "ko": "통합 리포트 생성", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_scRNAseq_tutorial_report.pdf"] }
+  ],
+  "help": {
+    "intro": "이 예제는 <b>\"scRNA-seq Glioblastoma (10x)\"</b> 입니다. 사람 <b>교모세포종(뇌종양)</b> 조직의 공개 10x 데이터를 가지고, 원본 서열부터 AI 해석까지 전 과정을 체험합니다. 분석 순서는 PBMC(혈액) 예제와 같지만, 종양 조직에는 <b>훨씬 다양한 세포</b>(악성 교종세포·별아교세포·희소돌기아교세포/OPC·신경세포·미세아교세포/종양연관 대식세포·T세포·혈관내피세포 등)가 섞여 있어 <b>해석할 거리가 더 풍부</b>합니다. <b>왼쪽 Pipelines 목록에서 각 단계를 위에서부터 하나씩 누르기만</b> 하면 됩니다.",
+    "steps": {
+      "setup": "분석에 필요한 파이썬 도구들을 설치합니다. <b>처음 한 번만</b> 하면 됩니다. (PBMC 예제에서 이미 설치했다면 그대로 재사용됩니다.)",
+      "download": "인터넷에서 예제용 <b>사람 교모세포종</b> 원본 서열 파일(FASTQ, <b>약 19 GB</b>)을 자동으로 내려받습니다. 용량이 커서 <b>수십 분</b> 걸릴 수 있어요. 브라우저 창을 닫아도 다운로드는 계속됩니다.",
+      "build-star": "정렬 <b>프로그램</b>(STAR)을 이 컴퓨터(ARM)에 맞게 <b>소스에서 컴파일</b>해 설치합니다. 여기서는 유전체가 필요 없습니다 — 도구(프로그램)만 만듭니다. 한 번만 하면 됩니다.",
+      "reference": "<b>2a에서 만든 STAR 프로그램으로</b> 사람 표준 유전체(GRCh38)의 색인을 만듭니다. 색인 만들기 자체가 STAR로 하는 작업이라 <b>반드시 2a 다음</b>에 실행합니다. <b>PBMC 예제에서 이미 만들었다면 다시 만들지 않고 그대로 재사용</b>하므로 대개 금방 넘어갑니다.",
+      "align": "서열을 유전체에 붙여서 <b>\"어떤 세포에서 어떤 유전자가 몇 개 나왔는지\"</b> 표(count matrix)를 만듭니다.",
+      "qc": "질 낮은 세포를 걸러내고(QC), 비슷한 세포끼리 묶어(클러스터링) UMAP 그림을 그리고, 각 무리의 대표 유전자(marker)와 <b>뇌종양 조직에 맞는 예상 세포 종류</b>를 정리합니다. 결과 파일 <code>markers_by_cluster.csv</code> 와 <code>celltype_draft.csv</code> 가 만들어집니다. <b>이 단계를 꼭 먼저 끝내야</b> 다음 AI 분석을 쓸 수 있습니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. 사용법은 아래 5번에서 설명합니다. 종양은 세포 종류가 다양해 AI가 해석해 줄 내용이 특히 풍부합니다.",
+      "report": "지금까지의 그림·표·해석을 하나의 <b>PDF 보고서</b>로 정리합니다. 결과를 저장하거나 공유할 때 편리합니다."
+    },
+    "glossary": [
+      { "term": "Glioblastoma (교모세포종)", "def": "사람 뇌에 생기는 <b>공격적인 악성 뇌종양</b>입니다. 이 예제에서 쓰는 데이터가 이 종양 조직에서 얻은 것입니다." },
+      { "term": "종양 미세환경 (TME)", "def": "종양 안에 섞여 있는 <b>여러 종류의 세포(면역세포·혈관·정상세포 등)</b>가 이루는 환경입니다. 단일세포 분석으로 이 구성을 자세히 들여다볼 수 있어요." }
+    ]
+  }
+}

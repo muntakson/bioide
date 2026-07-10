@@ -18,7 +18,8 @@ CHEMISTRY="v3"                                    # "v3" or "v2"
 TUT="${HOME}/ghbio-tutorial"
 STAR_BIN="${HOME}/bin/STAR"
 INDEX_DIR="${TUT}/ref/star_index"
-FASTQ_DIR="${TUT}/data/fastq/pbmc_1k_v3_fastqs"
+# The glioblastoma tar extracts to a NESTED dir (extra sample subdir), unlike PBMC.
+FASTQ_DIR="${TUT}/data/fastq/Parent_SC3v3_Human_Glioblastoma_fastqs/Parent_SC3v3_Human_Glioblastoma"
 WL_DIR="${TUT}/ref/whitelist"
 # Results are first-class project files. GHBIO_RESULTS is injected by the extension and
 # points at the project (~/ghbio-workspace/projects/<tutorial>/results). Falls back to the

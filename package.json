@@ -2,7 +2,7 @@
   "name": "ghbio-coscientist",
   "displayName": "GHBIO Co-Scientist",
   "description": "PlatformIO-style scRNA-seq bioinformatics IDE — projects, libraries, tutorials, and reliable single-shot AI analysis.",
-  "version": "0.2.7",
+  "version": "0.5.1",
   "publisher": "ghbio",
   "engines": {
     "vscode": "^1.85.0"
@@ -97,6 +97,19 @@
         "command": "ghbio.installLibrary",
         "title": "Install / Build",
         "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ghbio.openDashboard",
+        "title": "GHBIO: Open Dashboard",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "ghbio.openResult",
+        "title": "GHBIO: Open result file"
+      },
+      {
+        "command": "ghbio.runStepById",
+        "title": "GHBIO: Run pipeline step"
       }
     ],
     "menus": {
@@ -144,6 +157,11 @@
       ],
       "view/item/context": [
         {
+          "command": "ghbio.openDashboard",
+          "when": "view == ghbio.tutorials && viewItem == pipeline",
+          "group": "inline"
+        },
+        {
           "command": "ghbio.runStep",
           "when": "view == ghbio.tutorials && viewItem == step",
           "group": "inline"
@@ -151,6 +169,11 @@
         {
           "command": "ghbio.installLibrary",
           "when": "view == ghbio.libraries && viewItem == library",
+          "group": "inline"
+        },
+        {
+          "command": "ghbio.openDashboard",
+          "when": "view == ghbio.projects && viewItem == project",
           "group": "inline"
         },
         {
@@ -182,6 +205,16 @@
           "type": "string",
           "default": "~/.config/ghbio/providers.json",
           "description": "Path to the JSON file holding LLM provider API keys."
+        },
+        "ghbio.confirmBeforeRun": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a confirmation dialog explaining what will happen before running a pipeline step or the full analysis. Recommended for novice users; set false to run immediately on click."
+        },
+        "ghbio.openHomeOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the GHBIO Home dashboard (tutorial & project overview) automatically when the workbench starts, like PlatformIO Home."
         }
       }
     }

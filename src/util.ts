@@ -45,6 +45,18 @@ export function providersConfigPath(): string {
   return expandHome(cfg<string>("providersConfig", "~/.config/ghbio/providers.json"))
 }
 
+// A kind, modal "are you sure?" for novice users, shown before anything runs.
+// The dialog offers 예(Yes) / 아니오(No), and the modal itself always adds a Cancel
+// (X / Esc). Only an explicit Yes proceeds; No and Cancel both stop safely.
+// Callers can disable all confirmations via the ghbio.confirmBeforeRun setting.
+export async function confirmRun(heading: string, detail: string): Promise<boolean> {
+  if (!cfg<boolean>("confirmBeforeRun", true)) return true
+  const YES = "예, 실행할게요 (Yes)"
+  const NO = "아니오 (No)"
+  const pick = await vscode.window.showWarningMessage(heading, { modal: true, detail }, YES, NO)
+  return pick === YES
+}
+
 // Run a shell command as a VS Code Task in the integrated terminal — reliable,
 // visible, and user-stoppable (the whole point of moving off the old agent).
 export async function runShellTask(name: string, command: string, cwd?: string, env?: Record<string, string>) {

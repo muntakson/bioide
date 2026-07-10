@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
-import { runShellTask } from "./util"
+import { runShellTask, confirmRun } from "./util"
 import { Module, loadModules } from "./modules"
-import { Pipeline, Stage, ensureProject, isStageDone } from "./pipeline"
+import { Pipeline, Stage, ensureProject, stageComplete } from "./pipeline"
 
 // Tree over the module registry:
 //   (Module →)? Pipeline → Stage
@@ -46,7 +46,7 @@ export class TutorialProvider implements vscode.TreeDataProvider<Node> {
     }
     const s = n.s
     const it = new vscode.TreeItem(s.title, vscode.TreeItemCollapsibleState.None)
-    const done = isStageDone(n.p.id, s.produces)
+    const done = stageComplete(n.p.id, s)
     it.description = done ? `✓ ${s.ko ?? ""}`.trim() : s.ko
     it.tooltip = s.desc ?? s.ko
     it.iconPath = new vscode.ThemeIcon(
@@ -72,17 +72,64 @@ export class TutorialProvider implements vscode.TreeDataProvider<Node> {
   }
 }
 
+// Run a stage by (pipelineId, stageId) — used by the dashboard's step checklist.
+// Builds the same Node runStep expects, so it shares the confirmation dialog.
+export async function runStepById(
+  modules: Module[],
+  pipelineId: string,
+  stageId: string,
+  openAI: (pipelineId: string) => void,
+) {
+  for (const m of modules) {
+    const p = m.pipelines.find((pl) => pl.id === pipelineId)
+    if (!p) continue
+    const index = p.stages.findIndex((s) => s.id === stageId)
+    if (index < 0) return
+    return runStep({ kind: "stage", m, p, s: p.stages[index], index }, openAI)
+  }
+}
+
 // Run one pipeline stage: kind:"ai" opens the AI panel (for that pipeline);
 // otherwise the stage's shell command runs as a banner-wrapped VS Code task.
 export async function runStep(node: Node, openAI: (pipelineId: string) => void) {
   if (node.kind !== "stage") return
   const { p, s } = node
-  if (s.kind === "ai") {
-    openAI(p.id)
+  if (s.kind !== "ai" && !s.run) {
+    vscode.window.showWarningMessage(`GHBIO: step "${s.title}" has no command.`)
     return
   }
-  if (!s.run) {
-    vscode.window.showWarningMessage(`GHBIO: step "${s.title}" has no command.`)
+
+  // Novice-friendly, STATE-AWARE confirmation: a stateless "run this?" prompt misleads
+  // users on long steps — they can't tell if it's already done or still downloading.
+  // We detect both (completion via produces/presentPath; running via active tasks) and
+  // say so plainly, and reassure that re-running never deletes/corrupts existing files.
+  const raw = p.help?.steps?.[s.id] ?? s.desc ?? s.ko ?? "이 단계를 실행합니다."
+  const plain = raw.replace(/<[^>]+>/g, "")
+
+  const taskName = `GHBIO: ${s.title.replace(/"/g, "")}`
+  const running = vscode.tasks.taskExecutions.some((e) => e.task.name === taskName)
+  const complete = stageComplete(p.id, s) === true
+
+  let status: string
+  if (s.kind === "ai") {
+    status = "\n\nAI 분석 창을 열까요?"
+  } else if (running) {
+    status =
+      "\n\n⏳ 지금 이 단계가 이미 실행/다운로드 중입니다. 중복 실행하면 파일이 충돌·손상될 수 있어요. " +
+      "끝날 때까지 기다리시길 권합니다. 그래도 다시 시작할까요?  (권장: 아니오)"
+  } else if (complete) {
+    status =
+      "\n\n✅ 이 단계는 이미 완료되었습니다 — 필요한 파일이 이미 준비되어 있습니다. 다시 하지 않아도 됩니다. " +
+      "다시 실행해도 기존 파일은 지워지지 않고, 이미 있으면 건너뜁니다. 그래도 다시 실행할까요?  (권장: 아니오)"
+  } else {
+    status =
+      "\n\n이 단계를 지금 실행할까요? 이미 받은 부분이 있으면 이어받고, 완료돼 있으면 건너뜁니다 " +
+      "— 기존 파일을 지우거나 손상시키지 않습니다."
+  }
+  if (!(await confirmRun(`▶ ${s.title}`, plain + status))) return
+
+  if (s.kind === "ai") {
+    openAI(p.id)
     return
   }
   // Outputs are first-class files in Projects/<pipeline>/; the pipeline module owns
