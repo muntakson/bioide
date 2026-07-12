@@ -2,6 +2,19 @@
   "id": "scrna-seq-glioblastoma",
   "name": "scRNA-seq Glioblastoma (10x)",
   "summary": "사람 교모세포종(뇌종양) FASTQ → count matrix → clustering → AI 가설",
+  "dataSource": {
+    "provider": "10x Genomics",
+    "dataset": "Human Glioblastoma Multiforme (SC3′ v3, Whole Transcriptome)",
+    "datasetUrl": "https://www.10xgenomics.com/datasets/human-glioblastoma-multiforme-3-v-3-whole-transcriptome-analysis-3-standard-4-0-0",
+    "fastqUrl": "https://cf.10xgenomics.com/samples/cell-exp/4.0.0/Parent_SC3v3_Human_Glioblastoma/Parent_SC3v3_Human_Glioblastoma_fastqs.tar",
+    "size": "~19 GB",
+    "note": "공개 데이터 · 다운로드 스크립트: 01_download_glioblastoma.sh",
+    "download": {
+      "tar": "~/ghbio-tutorial/data/fastq/Parent_SC3v3_Human_Glioblastoma_fastqs.tar",
+      "totalBytes": 19185735680,
+      "extracted": "~/ghbio-tutorial/data/fastq/Parent_SC3v3_Human_Glioblastoma_fastqs"
+    }
+  },
   "deepModule": true,
   "steps": [
     { "id": "setup", "title": "0. Setup Python env", "ko": "분석 환경(Scanpy) 설치", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
@@ -27,7 +40,9 @@
     },
     "glossary": [
       { "term": "Glioblastoma (교모세포종)", "def": "사람 뇌에 생기는 <b>공격적인 악성 뇌종양</b>입니다. 이 예제에서 쓰는 데이터가 이 종양 조직에서 얻은 것입니다." },
-      { "term": "종양 미세환경 (TME)", "def": "종양 안에 섞여 있는 <b>여러 종류의 세포(면역세포·혈관·정상세포 등)</b>가 이루는 환경입니다. 단일세포 분석으로 이 구성을 자세히 들여다볼 수 있어요." }
+      { "term": "종양 미세환경 (TME)", "def": "종양 안에 섞여 있는 <b>여러 종류의 세포(면역세포·혈관·정상세포 등)</b>가 이루는 환경입니다. 단일세포 분석으로 이 구성을 자세히 들여다볼 수 있어요." },
+      { "term": "count matrix는 어떻게 만들어지나 (STARsolo)", "def": "STARsolo는 두 read를 함께 씁니다: <b>R1</b>에서 <b>세포 바코드(CB = 어느 세포인지)</b>와 <b>UMI(= 어느 mRNA 분자인지)</b>를 꺼내고, <b>R2(cDNA)</b>를 유전체에 정렬해 <b>어느 유전자</b>인지 알아냅니다. 과정은 ① 바코드를 whitelist에 맞춰 <b>오류 보정</b> → ② cDNA 정렬로 유전자 결정 → ③ 같은 <b>(세포·유전자·UMI)</b>를 하나로 합쳐 <b>PCR 중복 제거</b> 입니다. 그러면 세포마다·유전자마다 남은 <b>고유 UMI 개수 = 원래 mRNA 분자 수 = 카운트</b>가 되고, 이를 모아 <b>유전자 × 세포</b> 희소행렬(<code>matrix.mtx</code>)을 만듭니다. 끝으로 빈 방울(ambient RNA)과 진짜 세포를 구분해 <code>raw/</code>(전체)와 <code>filtered/</code>(진짜 세포)로 나눕니다 — 이후 분석엔 <b>filtered</b>를 씁니다." },
+      { "term": "STAR 진행 로그 숫자 읽는 법 (⏳ 줄)", "def": "STARsolo 매핑 중 <code>⏳</code> 줄에 나오는 숫자는 STAR의 진행 상황입니다. 시각 다음 순서대로: ① <b>속도</b>(시간당 백만 read), ② <b>처리한 read 수</b>, ③ <b>평균 read 길이(bp)</b>, ④ <b>고유 매핑 %</b>(한 곳에만 정확히 붙음 — 가장 중요), ⑤ <b>평균 정렬 길이</b>, ⑥ <b>불일치율 %</b>(낮을수록 좋음), ⑦ <b>다중 매핑 %</b>(여러 곳에 붙음), ⑧~⑪ <b>매핑 실패 4종</b>(위치 너무 많음 · 불일치 너무 많음 · 너무 짧음 · 기타). 예: 고유 84.6% + 다중 9.2% ≈ 94% 매핑이면 <b>정상적인 사람 scRNA-seq</b> 결과입니다. 이 값은 <b>진행 중 수치</b>이고, 최종 통계는 완료 후 <code>Solo.out/Gene/Summary.csv</code> 에 저장됩니다." }
     ]
   }
 }

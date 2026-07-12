@@ -64,9 +64,10 @@ elif [[ "${CHEMISTRY}" == "v2" ]]; then
   CB_LEN=16
   UMI_LEN=10
   WL_FILE="${WL_DIR}/737K-august-2016.txt"
-  WL_PRIMARY="https://github.com/10XGenomics/cellranger/raw/master/lib/python/cellranger/barcodes/737K-august-2016.txt"
-  WL_MIRROR=""     # plain text; primary is usually reliable
-  WL_IS_GZ=0
+  # Teichlab scg_lib_structs hosts the gzipped whitelist; the old 10x cellranger repo path 404s now.
+  WL_PRIMARY="https://teichlab.github.io/scg_lib_structs/data/10X-Genomics/737K-august-2016.txt.gz"
+  WL_MIRROR=""
+  WL_IS_GZ=1
 else
   echo "ERROR: unknown CHEMISTRY='${CHEMISTRY}' (use 'v3' or 'v2')." >&2; exit 1
 fi

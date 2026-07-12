@@ -1,7 +1,7 @@
-# GHBIO Co-Scientist — Operations Guide (code-server + extension)
+# BioIDE — Operations Guide (code-server + extension)
 
 A **VS Code IDE in the browser** (code-server) at **https://ghbiocosci.iotok.org**, with the
-**GHBIO Co-Scientist** extension (PlatformIO-style: Tutorials / Projects / Libraries + a reliable
+**BioIDE** extension (PlatformIO-style: Tutorials / Projects / Libraries + a reliable
 single-shot **AI Analysis** panel). Replaces the retired OpenScience app.
 
 ## Access

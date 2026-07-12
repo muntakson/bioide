@@ -37,6 +37,26 @@ export interface AiContextFile {
   topByRank?: number // keep only rows whose 2nd CSV column ∈ [1, N]
 }
 
+// A pipeline-scoped "one-click high-school report" action. When present, the AI panel
+// shows an extra button after the preset prompts that rewrites the analysis into a
+// 고등학생-level Korean report (heavy on metaphors, with a dedicated section comparing the
+// original paper's conclusions against what THIS tutorial computed) and builds a PDF.
+export interface EasyReportSpec {
+  label: string // button text
+  makeReport?: string // shell script (relative to the pipeline dir) that turns the report md into a PDF
+  paperClaim?: string // the original paper's published conclusion, so the model can judge agreement
+  title?: string // report H1 (e.g. "# 🔬 흑색종 세포 이야기 — 고등학생 리포트"); falls back to a generic title
+  datasetLabel?: string // short phrase naming what THIS tutorial computed (e.g. "PBMC 면역세포 scRNA-seq 분석")
+}
+
+// A pipeline-scoped comprehension survey ("이해도 테스트") for education research.
+// When present, the AI panel shows a button to open the survey form and one to open
+// the aggregated statistics. Questions live in the pipeline dir's survey.json.
+export interface SurveySpec {
+  testLabel?: string // survey-open button text
+  resultLabel?: string // stats-open button text
+}
+
 export interface AiConfig {
   intro?: string
   system?: string
@@ -45,6 +65,8 @@ export interface AiConfig {
   context?: AiContextFile[]
   models?: Record<string, string[]>
   prompts?: AiPromptSpec[]
+  easyReport?: EasyReportSpec
+  survey?: SurveySpec
 }
 
 export interface ModuleManifest {

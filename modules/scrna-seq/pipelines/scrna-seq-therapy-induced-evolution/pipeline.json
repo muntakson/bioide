@@ -1,0 +1,39 @@
+{
+  "id": "scrna-seq-therapy-induced-evolution",
+  "name": "Therapy-induced evolution of lung cancer",
+  "summary": "Maynard et al. (Cell 2020): reproduce the authors' Smart-seq2 lung-cancer analysis",
+  "dataSource": {
+    "provider": "Maynard et al. / NCBI BioProject PRJNA591860",
+    "dataset": "Therapy-Induced Evolution of Human Lung Cancer",
+    "datasetUrl": "https://www.ncbi.nlm.nih.gov/bioproject/PRJNA591860",
+    "fastqUrl": "https://drive.google.com/drive/folders/1sDzO0WOD4rnGC7QfTKwdcQTx3L36PFwX",
+    "size": "Authors' processed Data_input folder (download size depends on Google Drive contents)",
+    "note": "Smart-seq2 count matrix and metadata supplied by the authors; raw sequencing is also archived at PRJNA591860.",
+    "download": { "extracted": "~/ghbio-tutorial/maynard-2020/scell_lung_adenocarcinoma/Data_input" }
+  },
+  "deepModule": true,
+  "steps": [
+    { "id": "setup", "title": "0. Set up legacy R / Seurat environment", "ko": "논문 당시 Seurat 분석 환경 설치", "kind": "task", "run": "bash 00_setup_legacy_r.sh", "presentPath": "~/ghbio-venv-r/maynard-2020/.ready" },
+    { "id": "materials", "title": "1. Download authors' source code and data", "ko": "저자 GitHub 코드 + 공개 Data_input", "kind": "task", "run": "bash 01_fetch_author_materials.sh", "presentPath": "~/ghbio-tutorial/maynard-2020/scell_lung_adenocarcinoma/Data_input" },
+    { "id": "core", "title": "2. Build the published Seurat objects", "ko": "원 논문의 import · QC · merge · 전체 세포 clustering", "kind": "task", "run": "bash 02_run_authors_workflow.sh core", "produces": ["maynard-2020-core.complete"] },
+    { "id": "immune", "title": "3. Reproduce immune-compartment analysis", "ko": "면역세포 annotation 및 치료 상태 비교", "kind": "task", "run": "bash 02_run_authors_workflow.sh immune", "produces": ["maynard-2020-immune.complete"] },
+    { "id": "cancer", "title": "4. Prepare epithelial/CNV analysis", "ko": "암세포 분석 준비 · inferCNV 수동 단계 안내", "kind": "task", "run": "bash 02_run_authors_workflow.sh cancer", "produces": ["maynard-2020-cancer.complete"] },
+    { "id": "ai", "title": "5. AI interpretation & hypotheses", "ko": "결과 해석·후속 가설 (패널)", "kind": "ai" }
+  ],
+  "help": {
+    "intro": "<b>Maynard et al., Cell (2020)</b>의 치료 유도 폐암 진화 단일세포 분석을 저자가 공개한 코드와 처리된 데이터를 사용해 재현합니다. 이 연구는 30명 환자의 49개 생검을 Smart-seq2로 분석했습니다.",
+    "steps": {
+      "setup": "논문 코드가 사용한 초기 Seurat API와 R 패키지를 전용 사용자 라이브러리에 설치합니다. 시간이 걸릴 수 있으며, 한 번만 하면 됩니다.",
+      "materials": "저자 저장소를 논문 공개 버전 commit으로 고정해 내려받고, README에 링크된 공개 Google Drive <code>Data_input</code> 폴더를 받습니다. 원본 FASTQ는 크므로 자동으로 받지 않습니다; 필요하면 BioProject PRJNA591860에서 받으세요.",
+      "core": "저자 notebooks 01, 02, 02.1, 03, 03.1을 순서대로 렌더링합니다. 입력 matrix/metadata에서 QC된 Seurat object, 전체 세포 clustering, immune/non-immune subset을 생성합니다.",
+      "immune": "저자 IM01–IM06 notebooks를 순서대로 실행합니다. 면역세포의 annotation과 treatment-stage별 변화를 재현합니다.",
+      "cancer": "저자 NI01–NI02 notebooks를 실행해 epithelial subset과 CNV 입력을 준비합니다. 공개 저장소에는 실제 inferCNV 실행 notebook(NI03.1)과 그 산출물이 없으므로, 다음 differential-expression notebooks(NI04–NI17)는 이 단계가 만든 안내 파일의 요구사항을 충족한 뒤에만 수동으로 실행할 수 있습니다.",
+      "ai": "완료된 Seurat object와 생성 그림을 확인한 뒤, 논문의 RD(잔존 질환)·PD(진행 질환) 특징과 자신의 재현 결과를 해석하는 데 AI 패널을 사용하세요."
+    },
+    "glossary": [
+      { "term": "TN / RD / PD", "def": "<b>TN</b>은 치료 전, <b>RD</b>는 표적치료 중 종양이 줄거나 안정적인 잔존 질환, <b>PD</b>는 치료 중 다시 진행한 질환입니다." },
+      { "term": "Smart-seq2", "def": "세포를 하나씩 plate에 분주해 전사체를 깊게 읽는 단일세포 RNA-seq 방법입니다. 이 논문은 droplet 10x 데이터가 아니라 Smart-seq2 count matrix를 사용합니다." },
+      { "term": "재현성 주의", "def": "원 코드에는 난수성과 수동 cluster annotation이 포함됩니다. 패키지·R 버전 차이 때문에 좌표나 cluster 번호의 완전한 일치는 보장되지 않습니다. 튜토리얼은 저자 code/data와 고정 commit을 보존해 추적 가능한 재실행을 제공합니다." }
+    ]
+  }
+}

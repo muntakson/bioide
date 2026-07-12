@@ -98,9 +98,24 @@ if [[ -f "${RESULTS}/step4_ai_report.md" ]]; then
   pandoc "${RESULTS}/step4_ai_report.md"      -f gfm -t html5 -o "$TMP/expert.html"; EXP_HTML="$TMP/expert.html"
 fi
 
+# --- 2b. Auto-fold the cached AI answers (results/.ai_cache/*.md) -------------
+# The AI panel caches each preset answer here (with a label header), so the report includes
+# them automatically — no need to manually 저장 each one. Each becomes a titled subsection.
+AI_AUTO=""
+CACHE_DIR="${RESULTS}/.ai_cache"
+if compgen -G "${CACHE_DIR}/*.md" > /dev/null 2>&1; then
+  AI_AUTO="$TMP/ai_auto.html"; : > "$AI_AUTO"
+  for f in "${CACHE_DIR}"/*.md; do
+    label="$(sed -n 's/^<!--[[:space:]]*GHBIO_AI_LABEL:[[:space:]]*\(.*\)[[:space:]]*-->.*$/\1/p' "$f" | head -1)"
+    [[ -z "$label" ]] && label="$(basename "${f%.md}")"
+    grep -v 'GHBIO_AI_LABEL' "$f" | pandoc -f gfm -t html5 -o "$TMP/one.html"
+    { printf '<h2>%s</h2>\n' "$label"; cat "$TMP/one.html"; } >> "$AI_AUTO"
+  done
+fi
+
 # --- 3. Assemble full HTML (cover + figures + reports + appendix) + render ----
 RESULTS="$RESULTS" AUTHOR="$AUTHOR" SAMPLE="$SAMPLE" REPORT_DATE="$REPORT_DATE" \
-LOGO="$LOGO" TMP="$TMP" EASY_HTML="$EASY_HTML" EXP_HTML="$EXP_HTML" "$PY" - <<'PY'
+LOGO="$LOGO" TMP="$TMP" EASY_HTML="$EASY_HTML" EXP_HTML="$EXP_HTML" AI_AUTO_HTML="$AI_AUTO" "$PY" - <<'PY'
 import os, base64, csv, html, collections
 R, TMP = os.environ["RESULTS"], os.environ["TMP"]
 def b64(p): return base64.b64encode(open(p,'rb').read()).decode()
@@ -149,26 +164,32 @@ cover = f"""<div class="cover">
 </div>"""
 
 figs = f"""<div class="pagebreak"></div><h1>분석 결과 그림 (Figures)</h1>
+<p>이번 분석의 핵심 결과 그림입니다. 각 그림 아래에 <b>무엇을 보여주는지</b>와 <b>읽는 법</b>을 함께 설명했습니다.</p>
 <figure><img src="data:image/png;base64,{b64(os.path.join(R,'umap_clusters.png'))}">
 <figcaption>Figure 1. UMAP — {cells}개 세포의 {n_clusters}개 Leiden 클러스터 (세포 타입별 그룹화)</figcaption></figure>
+<p><b>Figure 1 · UMAP 읽는 법.</b> UMAP은 각 세포의 수천 개 유전자 발현을 2차원 점 하나로 압축한 지도입니다. <b>점 하나 = 세포 하나</b>, <b>색 = Leiden 클러스터</b>(발현 패턴이 비슷해 한 무리로 묶인 세포들)입니다. 서로 <b>가까운 점일수록 유전자 발현이 비슷</b>하고, 멀리 떨어진 덩어리는 대체로 <b>다른 세포 유형·상태</b>입니다. 가로·세로 축 숫자 자체에는 의미가 없으며, <b>무리가 몇 개로 나뉘고 얼마나 뚜렷이 떨어져 있는지</b>를 봅니다. 각 무리가 실제로 어떤 세포인지는 <b>부록 A의 marker 유전자</b>와 아래 AI 해석으로 판단합니다.</p>
 <figure><img src="data:image/png;base64,{b64(os.path.join(R,'qc_violin.png'))}">
-<figcaption>Figure 2. QC 지표 — 세포당 유전자 수 / 총 UMI / 미토콘드리아 비율(%)</figcaption></figure>"""
+<figcaption>Figure 2. QC 지표 — 세포당 유전자 수 / 총 UMI / 미토콘드리아 비율(%)</figcaption></figure>
+<p><b>Figure 2 · QC 지표 읽는 법.</b> 분석 전에 <b>품질이 낮은 세포를 걸러내기 위한</b> 세 가지 분포입니다(바이올린이 넓을수록 그 값을 가진 세포가 많음). <b>① 세포당 유전자 수(n_genes)</b>: 너무 적으면 빈 방울·죽은 세포, 너무 많으면 두 세포가 한 방울에 잡힌 <b>doublet</b> 의심. <b>② 총 UMI(total_counts)</b>: 세포가 잡아낸 mRNA 분자 총량으로 세포 크기·품질을 반영합니다. <b>③ 미토콘드리아 비율(pct_mito)</b>: 값이 <b>높으면 손상되었거나 죽어가는 세포</b>일 가능성이 큽니다. 이 기준으로 정상 범위를 벗어난 세포를 제거한 뒤 클러스터링했습니다.</p>"""
 
 css  = open(os.path.join(TMP,"ghbio.css")).read()
-def _ai_section(env_key, title):
+def _read(env_key):
     p = os.environ.get(env_key)
-    if p and os.path.exists(p):
-        return open(p).read()
-    return (f"<h1>{title}</h1><blockquote>AI 해석 리포트가 아직 저장되지 않았습니다. "
-            "AI 분석 단계에서 답변을 <code>step4_ai_report_easy.md</code> / "
-            "<code>step4_ai_report.md</code> 로 저장한 뒤 리포트를 다시 생성하면 이 섹션이 채워집니다."
-            "</blockquote>")
-easy = _ai_section("EASY_HTML", "AI 해석 (쉬운 설명)")
-exp  = _ai_section("EXP_HTML", "AI 해석 (전문가)")
+    return open(p).read() if (p and os.path.exists(p)) else ""
+ai_blocks = []
+if _read("EASY_HTML"):
+    ai_blocks.append("<div class='pagebreak'></div><h1>AI 해석 (쉬운 설명)</h1>" + _read("EASY_HTML"))
+if _read("EXP_HTML"):
+    ai_blocks.append("<div class='pagebreak'></div><h1>AI 해석 (전문가)</h1>" + _read("EXP_HTML"))
+if _read("AI_AUTO_HTML"):
+    ai_blocks.append("<div class='pagebreak'></div><h1>AI 해석 (프리셋 질문별)</h1>"
+                     "<p>AI 분석 패널에서 실행한 프리셋 질문들의 저장된 답변입니다.</p>" + _read("AI_AUTO_HTML"))
+if not ai_blocks:
+    ai_blocks.append("<div class='pagebreak'></div><h1>AI 해석</h1><blockquote>AI 해석이 아직 없습니다. "
+                     "AI 분석 단계에서 프리셋 질문을 실행하면 자동으로 저장되어 다음 리포트에 포함됩니다.</blockquote>")
+ai_html = "".join(ai_blocks)
 html_doc = (f'<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">'
-    f'<style>{css}</style></head><body>{cover}{figs}'
-    f'<div class="pagebreak"></div>{easy}'
-    f'<div class="pagebreak"></div>{exp}{appendix}</body></html>')
+    f'<style>{css}</style></head><body>{cover}{figs}{ai_html}{appendix}</body></html>')
 open(os.path.join(TMP,"merged.html"),"w").write(html_doc)
 print(f"   metadata: {cells} cells, {n_clusters} clusters, {genes} genes")
 PY

@@ -66,6 +66,22 @@ reintroduce tool/agent loops here.
 - The module's `ai.context` result CSVs are read into the prompt. **Preset prompts** require result files to exist; **free-form questions** are answered anytime (results attached only when present).
 - "Save answer to report" buttons write `step4_ai_report_easy.md` / `step4_ai_report.md` into the results dir (shown only after a preset prompt). `05_make_report.sh` folds these in **optionally** — the PDF builds from QC outputs alone when they're absent.
 
+### NSCLC Atlas explorer (`src/atlas.ts`, `webview-src/atlas/`)
+A **React** teaching webview (interactive UMAP / gene feature plot / marker dot plot / composition +
+guided tour, concept cards, live-checking exercises) — opened by `ghbio.openAtlas` from a Home card.
+Unlike every other panel (which builds a plain HTML string), this one is a bundled React app:
+- **Source** lives in `webview-src/atlas/` (vendored from the standalone Next.js `nsclc-atlas` app, Next
+  stripped — every component is a pure client component). `esbuild.mjs` has a **second context** that
+  bundles `webview-src/atlas/main.tsx` → `media/atlas/atlas.bundle.js` (browser/IIFE). `@/…` path
+  aliases resolve via `webview-src/atlas/tsconfig.json`. Typecheck it with `npx tsc --noEmit -p webview-src/atlas/tsconfig.json`.
+- **Tailwind** classes are compiled to a **static** `media/atlas/atlas.css` at build time (the webview
+  can't run PostCSS) — `esbuild.mjs` shells out to the `tailwindcss` CLI with `tailwind.atlas.config.js`.
+- **Data**: the synthetic dataset ships as `media/atlas/{meta.json,expr.bin}` (uint8 cell-major expr,
+  ≈0.6 MB). `src/atlas.ts` injects their `asWebviewUri`s on `window.__ATLAS__`; `lib/data.ts` fetches
+  those (falling back to Next's `/data/*` so the standalone app still runs). Swap in real published data
+  (GSE131907 / CELLxGENE) by regenerating those two files with `media/atlas/scripts/convert_h5ad.py` —
+  no frontend change.
+
 ### Entry point (`src/extension.ts`)
 `activate()` registers the three tree providers and the `ghbio.*` commands. Command IDs and view
 contributions live in `package.json` under `contributes`.

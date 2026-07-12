@@ -1,0 +1,68 @@
+{
+  "id": "scrna-seq-pan-t-cells",
+  "name": "scRNA-seq Pan T cells (10x)",
+  "summary": "사람 Pan T세포 FASTQ → count matrix → T세포 하위유형 clustering → AI 가설",
+  "dataSource": {
+    "provider": "10x Genomics",
+    "dataset": "4k Pan T Cells from a Healthy Donor (SC3′ v2)",
+    "datasetUrl": "https://www.10xgenomics.com/datasets/4-k-pan-t-cells-from-a-healthy-donor-2-standard-2-1-0",
+    "fastqUrl": "https://cf.10xgenomics.com/samples/cell-exp/2.1.0/t_4k/t_4k_fastqs.tar",
+    "size": "~33 GB",
+    "note": "공개 데이터 · 3′ v2 chemistry · 다운로드 스크립트: 01_download_pan_t_cells.sh",
+    "download": {
+      "tar": "~/ghbio-tutorial/data/fastq/t_4k_fastqs.tar",
+      "totalBytes": 35161856000,
+      "extracted": "~/ghbio-tutorial/data/fastq/t_4k/fastqs"
+    }
+  },
+  "deepModule": true,
+  "steps": [
+    { "id": "setup", "title": "0. Setup Python env", "ko": "분석 환경(Scanpy) 설치", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
+    { "id": "download", "title": "1. Download Pan T cells FASTQ", "ko": "공개 10x Pan T세포 데이터 (~33 GB·v2)", "kind": "task", "run": "bash 01_download_pan_t_cells.sh", "presentPath": "~/ghbio-tutorial/data/fastq/t_4k/fastqs" },
+    { "id": "build-star", "title": "2a. Install STAR aligner (compile)", "ko": "STAR 정렬 프로그램 설치 (소스 컴파일·ARM)", "kind": "task", "run": "bash 02a_build_starsolo.sh", "presentPath": "~/bin/STAR" },
+    { "id": "reference", "title": "2b. Build GRCh38 index (needs 2a)", "ko": "GRCh38 유전체 색인 생성 (2a 필요·다른 예제와 공유·1회성)", "kind": "task", "run": "bash 02b_reference.sh", "presentPath": "~/ghbio-tutorial/ref/star_index/SAindex" },
+    { "id": "align", "title": "2c. Run STARsolo (v2)", "ko": "count matrix 생성 (v2 chemistry)", "kind": "task", "run": "bash 02c_run_starsolo.sh", "produces": ["starsolo/Solo.out/Gene/filtered/matrix.mtx"] },
+    { "id": "qc", "title": "3. QC & clustering (Scanpy)", "ko": "UMAP·marker·T세포 하위유형", "kind": "task", "run": "~/ghbio-venv/bin/python 03_scanpy_qc.py", "produces": ["markers_by_cluster.csv", "celltype_draft.csv", "umap_clusters.png"] },
+    { "id": "ai", "title": "4. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 패널)", "kind": "ai" },
+    { "id": "report", "title": "5. Generate PDF report", "ko": "통합 리포트 생성", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_scRNAseq_tutorial_report.pdf"] }
+  ],
+  "ai": {
+    "system": "You are the GHBIO AI Co-Scientist for a single-cell RNA-seq analysis of FACS-purified human pan T cells from blood (10x 4k Pan T, 3' v2). Almost every cell is a T cell, so interpret clusters as T-cell subsets along differentiation and activation axes: naive (CCR7/SELL/TCF7/LEF1), central/effector memory, cytotoxic CD8 (CD8A/CD8B/GZMB/GZMK/NKG7), CD4 helper (CD4/IL7R), regulatory T cells (FOXP3/IL2RA/CTLA4), and proliferating T cells (MKI67/TOP2A). Small amounts of NK (GNLY/NCAM1) or contaminating non-T cells may appear. Do not invent non-T lineages where markers don't support them. Separate observation from hypothesis. Reply in Korean unless asked otherwise.",
+    "readyHint": "결과 파일이 없습니다. 먼저 3단계(QC & clustering)를 실행해 markers_by_cluster.csv / celltype_draft.csv 를 만들어 주세요.",
+    "prompts": [
+      { "key": "interpret", "label": "Interpret T-cell subsets", "q": "각 cluster를 T세포 하위유형 관점에서 해석해줘. naive, 중심/효과 기억(memory), 세포독성 CD8, CD4 도움, 조절 T세포(Treg), 증식 T세포, (있다면) NK/오염 세포를 구분하고 각 결론의 marker 근거와 confidence를 표로 제시해줘." },
+      { "key": "annotate", "label": "Refine T-cell annotation", "q": "T세포 canonical marker로 cluster를 정교화해줘: CCR7/SELL/TCF7/LEF1(naive), CD8A/CD8B/GZMB/GZMK/NKG7(세포독성 CD8), CD4/IL7R(CD4 도움), FOXP3/IL2RA/CTLA4(Treg), MKI67/TOP2A(증식), GNLY/NCAM1(NK). 근거 유전자와 함께 cluster별 최종 라벨 표를 만들어줘." },
+      { "key": "program", "label": "Activation vs differentiation", "q": "T세포의 분화(naive→memory→effector)와 활성/소진(exhaustion; PDCD1/HAVCR2/LAG3/TIGIT) 프로그램 관점에서 cluster들이 어떤 축 위에 놓이는지 설명하고, 어떤 marker가 이를 뒷받침하는지 관찰과 가설을 분리해 제시해줘." },
+      { "key": "hypothesis", "label": "Testable hypotheses", "q": "marker·annotation·프로그램 결과를 근거로 검증 가능한 가설 3~5개를 제시하고 각 가설의 근거·예측·검증 방법을 적어줘." },
+      { "key": "easy_report", "label": "🎓 고등학생 버전 보고서", "q": "이 분석 결과(T세포 하위유형 무리와 예상 라벨)를 바탕으로 **고등학생도 쉽게 이해할 수 있는 '쉬운 리포트'**를 작성해줘. 규칙: (1) 전문용어는 반드시 쉬운 말로 풀어 설명한다. (2) **일상 비유를 아주 많이** 사용한다 — 예: T세포=우리 몸을 지키는 경찰 조직, CD8 세포독성 T세포=범인을 직접 제압하는 형사, CD4 도움 T세포=현장을 지휘하는 반장, 조절 T세포(Treg)=과잉 진압을 막는 감찰관, naive T세포=아직 출동 전인 신입, 기억(memory) T세포=경험 많은 베테랑, marker 유전자=경찰 계급장/명찰, UMAP=성향에 따라 사람을 배치한 지도. 비유는 최소 6개 이상 자연스럽게 녹여 쓴다. (3) 순서: ① 무엇을 왜 했는지 ② 세포를 어떻게 무리로 나눴는지 ③ 각 무리가 어떤 T세포이고 무슨 역할인지(근거 marker를 쉬운 말로) ④ 이 결과가 왜 흥미롭고 앞으로 무엇을 알 수 있는지. (4) 어려운 표·숫자는 최소화하고 친근하고 격려하는 말투로 순수 한국어로 쓴다. (5) 맨 끝에 '💡 한 줄 요약'을 넣는다. 제목은 '# 🔬 T세포 부대 이야기 — 고등학생 쉬운 리포트'로 시작한다." }
+    ],
+    "easyReport": {
+      "label": "🎓 고등학생 버전 보고서",
+      "makeReport": "05_make_easy_report.sh",
+      "title": "# 🔬 T세포 부대 이야기 — 고등학생 쉬운 리포트",
+      "datasetLabel": "이 튜토리얼(건강한 사람 혈액 Pan T세포 10x scRNA-seq 분석)",
+      "paperClaim": "원 논문(Szabo et al., Nature Communications 2019, \"Single-cell transcriptomics of human T cells reveals tissue and activation signatures in health and disease\")의 핵심 주장: 사람 T세포는 하나의 균일한 집단이 아니라, 단일세포 RNA-seq로 보면 분화(naive→기억→효과)와 활성화 축을 따라 이어지는 여러 상태의 연속선을 이룬다. 혈액과 조직 전반에서 naive, 중심/효과 기억(memory), 세포독성 CD8, 조절 T세포(Treg), 증식 중 T세포 등이 활성화·분화 유전자 프로그램으로 구분되며, 이 상태 구조는 개인을 넘어 공통적으로 나타난다. 즉 T세포의 정체성은 CD4/CD8 이분법을 넘어 연속적인 상태들의 조합으로 이해해야 한다."
+    }
+  },
+  "help": {
+    "intro": "이 예제는 <b>\"scRNA-seq Pan T cells (10x)\"</b> 입니다. 건강한 사람의 혈액에서 <b>FACS로 분리한 순수 T세포</b> 공개 10x 데이터를 가지고, 원본 서열부터 AI 해석까지 전 과정을 체험합니다. 대부분이 T세포라서 클러스터가 <b>T세포 하위유형</b>(CD4·CD8, naive·memory/effector, 조절 T세포(Treg), 증식 중 T세포)으로 나뉘고, 소량의 NK세포나 오염 세포가 섞일 수 있어 <b>한 세포 계통을 세밀하게 나눠보는 연습</b>에 좋습니다. PBMC·교모세포종 예제와 <b>분석 순서는 동일</b>하지만 이 데이터는 <b>3′ v2 chemistry</b> 라 STARsolo 바코드 설정이 다릅니다(자동 처리됨).",
+    "steps": {
+      "setup": "분석에 필요한 파이썬 도구들을 설치합니다. <b>처음 한 번만</b> 하면 됩니다. (다른 예제에서 이미 설치했다면 그대로 재사용됩니다.)",
+      "download": "인터넷에서 예제용 <b>사람 Pan T세포</b> 원본 서열 파일(FASTQ, <b>약 33 GB</b>)을 자동으로 내려받습니다. 용량이 커서 <b>수십 분</b> 걸릴 수 있어요. 브라우저 창을 닫아도 다운로드는 계속됩니다.",
+      "build-star": "정렬 <b>프로그램</b>(STAR)을 이 컴퓨터(ARM)에 맞게 <b>소스에서 컴파일</b>해 설치합니다. 도구만 만드는 단계라 유전체는 필요 없습니다. 한 번만 하면 됩니다.",
+      "reference": "<b>2a에서 만든 STAR 프로그램으로</b> 사람 표준 유전체(GRCh38)의 색인을 만듭니다. <b>PBMC·교모세포종 예제에서 이미 만들었다면 그대로 재사용</b>하므로 대개 금방 넘어갑니다.",
+      "align": "서열을 유전체에 붙여서 <b>\"어떤 세포에서 어떤 유전자가 몇 개 나왔는지\"</b> 표(count matrix)를 만듭니다. 이 데이터는 <b>v2 chemistry</b>(UMI 10 bp, 737K 바코드 목록)로 자동 설정됩니다.",
+      "qc": "질 낮은 세포를 걸러내고(QC), 비슷한 세포끼리 묶어(클러스터링) UMAP 그림을 그리고, 각 무리의 대표 유전자(marker)와 <b>T세포 하위유형</b> 예상 라벨을 정리합니다. 결과 파일 <code>markers_by_cluster.csv</code> 와 <code>celltype_draft.csv</code> 가 만들어집니다. <b>이 단계를 꼭 먼저 끝내야</b> 다음 AI 분석을 쓸 수 있습니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. T세포 하위유형 구성과 marker 유전자를 바탕으로 해석·가설을 받아볼 수 있습니다.",
+      "report": "지금까지의 그림·표·해석을 하나의 <b>PDF 보고서</b>로 정리합니다. 결과를 저장하거나 공유할 때 편리합니다."
+    },
+    "glossary": [
+      { "term": "Pan T cell (범 T세포)", "def": "특정 하위유형만 고른 것이 아니라 <b>모든 T세포를 통틀어</b> 분리한 것을 말합니다. 이 예제 데이터는 건강한 사람 혈액에서 T세포만 골라낸 것입니다." },
+      { "term": "CD4 / CD8 T세포", "def": "T세포의 두 큰 갈래입니다. <b>CD4</b>는 도움 T세포(면역 반응을 조율), <b>CD8</b>는 세포독성 T세포(감염·종양 세포를 직접 제거)입니다." },
+      { "term": "조절 T세포 (Treg)", "def": "면역 반응을 <b>가라앉히고 자가면역을 막는</b> T세포입니다. FOXP3 유전자가 대표 marker입니다." },
+      { "term": "3′ v2 chemistry", "def": "10x의 초기 3′ 시약 버전입니다. v3에 비해 <b>UMI 길이가 10 bp</b>이고 바코드 목록(737K)이 다릅니다. 분석 파이프라인은 동일하고 STARsolo 설정만 자동으로 바뀝니다." },
+      { "term": "count matrix는 어떻게 만들어지나 (STARsolo)", "def": "STARsolo는 두 read를 함께 씁니다: <b>R1</b>에서 <b>세포 바코드(CB = 어느 세포인지)</b>와 <b>UMI(= 어느 mRNA 분자인지)</b>를 꺼내고, <b>R2(cDNA)</b>를 유전체에 정렬해 <b>어느 유전자</b>인지 알아냅니다. 과정은 ① 바코드를 whitelist에 맞춰 <b>오류 보정</b> → ② cDNA 정렬로 유전자 결정 → ③ 같은 <b>(세포·유전자·UMI)</b>를 하나로 합쳐 <b>PCR 중복 제거</b> 입니다. 그러면 세포마다·유전자마다 남은 <b>고유 UMI 개수 = 원래 mRNA 분자 수 = 카운트</b>가 되고, 이를 모아 <b>유전자 × 세포</b> 희소행렬(<code>matrix.mtx</code>)을 만듭니다. 끝으로 빈 방울(ambient RNA)과 진짜 세포를 구분해 <code>raw/</code>(전체)와 <code>filtered/</code>(진짜 세포)로 나눕니다 — 이후 분석엔 <b>filtered</b>를 씁니다." },
+      { "term": "STAR 진행 로그 숫자 읽는 법 (⏳ 줄)", "def": "STARsolo 매핑 중 <code>⏳</code> 줄에 나오는 숫자는 STAR의 진행 상황입니다. 시각 다음 순서대로: ① <b>속도</b>(시간당 백만 read), ② <b>처리한 read 수</b>, ③ <b>평균 read 길이(bp)</b>, ④ <b>고유 매핑 %</b>(한 곳에만 정확히 붙음 — 가장 중요), ⑤ <b>평균 정렬 길이</b>, ⑥ <b>불일치율 %</b>(낮을수록 좋음), ⑦ <b>다중 매핑 %</b>(여러 곳에 붙음), ⑧~⑪ <b>매핑 실패 4종</b>(위치 너무 많음 · 불일치 너무 많음 · 너무 짧음 · 기타). 예: 고유 84.6% + 다중 9.2% ≈ 94% 매핑이면 <b>정상적인 사람 scRNA-seq</b> 결과입니다. 이 값은 <b>진행 중 수치</b>이고, 최종 통계는 완료 후 <code>Solo.out/Gene/Summary.csv</code> 에 저장됩니다." }
+    ]
+  }
+}

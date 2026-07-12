@@ -2,6 +2,18 @@
   "id": "scrna-seq-pbmc",
   "name": "scRNA-seq PBMC (10x)",
   "summary": "FASTQ → count matrix → clustering → AI hypotheses",
+  "dataSource": {
+    "provider": "10x Genomics",
+    "dataset": "1k PBMCs from a Healthy Donor (v3 chemistry)",
+    "datasetUrl": "https://www.10xgenomics.com/datasets/1-k-pbm-cs-from-a-healthy-donor-v-3-chemistry-3-standard-3-0-0",
+    "fastqUrl": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/pbmc_1k_v3/pbmc_1k_v3_fastqs.tar",
+    "note": "공개 데이터 · 다운로드 스크립트: 01_download_pbmc.sh",
+    "download": {
+      "tar": "~/ghbio-tutorial/data/fastq/pbmc_1k_v3_fastqs.tar",
+      "totalBytes": 5549312000,
+      "extracted": "~/ghbio-tutorial/data/fastq/pbmc_1k_v3_fastqs"
+    }
+  },
   "deepModule": true,
   "steps": [
     { "id": "setup", "title": "0. Setup Python env", "ko": "분석 환경(Scanpy) 설치", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
@@ -13,6 +25,15 @@
     { "id": "ai", "title": "4. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 패널)", "kind": "ai" },
     { "id": "report", "title": "5. Generate PDF report", "ko": "통합 리포트 생성", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_scRNAseq_tutorial_report.pdf"] }
   ],
+  "ai": {
+    "easyReport": {
+      "label": "🎓 고등학생 버전 보고서",
+      "makeReport": "05_make_easy_report.sh",
+      "title": "# 🔬 우리 몸 면역세포 이야기 — 고등학생 쉬운 리포트",
+      "datasetLabel": "이 튜토리얼(건강한 사람 혈액 PBMC 10x scRNA-seq 분석)",
+      "paperClaim": "원 논문(Zheng et al., Nature Communications 2017, \"Massively parallel digital transcriptional profiling of single cells\")의 핵심 주장: 물방울(droplet) 기반 대량 병렬 단일세포 RNA 시퀀싱(10x GemCode/Chromium)으로 수천~수만 개의 세포를 한 번에 값싸게 읽을 수 있고, 사람 말초혈액 단핵세포(PBMC)에서 오직 유전자 발현만으로 주요 면역세포 종류 — T세포(CD4 도움/CD8 세포독성), B세포, NK세포, 단핵구(monocyte), 수지상세포(dendritic cell) — 를 세포 하나 단위로 구분해낼 수 있음을 보였다. 이로써 PBMC는 단일세포 분석 방법을 검증하는 표준 기준 데이터가 되었다."
+    }
+  },
   "help": {
     "intro": "이 예제는 <b>\"scRNA-seq PBMC (10x)\"</b> 입니다. 사람 혈액 속 면역세포(PBMC) 공개 데이터를 가지고, 원본 서열부터 AI 해석까지 전 과정을 체험합니다. <b>왼쪽 Pipelines 목록에서 각 단계를 위에서부터 하나씩 누르기만</b> 하면 됩니다.",
     "steps": {
@@ -26,7 +47,9 @@
       "report": "지금까지의 그림·표·해석을 하나의 <b>PDF 보고서</b>로 정리합니다. 결과를 저장하거나 공유할 때 편리합니다."
     },
     "glossary": [
-      { "term": "PBMC", "def": "혈액에서 뽑은 <b>면역세포 모음</b>입니다. 이 예제에서 쓰는 데이터가 이것입니다." }
+      { "term": "PBMC", "def": "혈액에서 뽑은 <b>면역세포 모음</b>입니다. 이 예제에서 쓰는 데이터가 이것입니다." },
+      { "term": "count matrix는 어떻게 만들어지나 (STARsolo)", "def": "STARsolo는 두 read를 함께 씁니다: <b>R1</b>에서 <b>세포 바코드(CB = 어느 세포인지)</b>와 <b>UMI(= 어느 mRNA 분자인지)</b>를 꺼내고, <b>R2(cDNA)</b>를 유전체에 정렬해 <b>어느 유전자</b>인지 알아냅니다. 과정은 ① 바코드를 whitelist에 맞춰 <b>오류 보정</b> → ② cDNA 정렬로 유전자 결정 → ③ 같은 <b>(세포·유전자·UMI)</b>를 하나로 합쳐 <b>PCR 중복 제거</b> 입니다. 그러면 세포마다·유전자마다 남은 <b>고유 UMI 개수 = 원래 mRNA 분자 수 = 카운트</b>가 되고, 이를 모아 <b>유전자 × 세포</b> 희소행렬(<code>matrix.mtx</code>)을 만듭니다. 끝으로 빈 방울(ambient RNA)과 진짜 세포를 구분해 <code>raw/</code>(전체)와 <code>filtered/</code>(진짜 세포)로 나눕니다 — 이후 분석엔 <b>filtered</b>를 씁니다." },
+      { "term": "STAR 진행 로그 숫자 읽는 법 (⏳ 줄)", "def": "STARsolo 매핑 중 <code>⏳</code> 줄에 나오는 숫자는 STAR의 진행 상황입니다. 시각 다음 순서대로: ① <b>속도</b>(시간당 백만 read), ② <b>처리한 read 수</b>, ③ <b>평균 read 길이(bp)</b>, ④ <b>고유 매핑 %</b>(한 곳에만 정확히 붙음 — 가장 중요), ⑤ <b>평균 정렬 길이</b>, ⑥ <b>불일치율 %</b>(낮을수록 좋음), ⑦ <b>다중 매핑 %</b>(여러 곳에 붙음), ⑧~⑪ <b>매핑 실패 4종</b>(위치 너무 많음 · 불일치 너무 많음 · 너무 짧음 · 기타). 예: 고유 84.6% + 다중 9.2% ≈ 94% 매핑이면 <b>정상적인 사람 scRNA-seq</b> 결과입니다. 이 값은 <b>진행 중 수치</b>이고, 최종 통계는 완료 후 <code>Solo.out/Gene/Summary.csv</code> 에 저장됩니다." }
     ]
   }
 }

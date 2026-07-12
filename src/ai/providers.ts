@@ -20,17 +20,20 @@ export function loadProviders(): ProvidersCfg {
 interface Endpoint {
   url: string
   headers: (key: string) => Record<string, string>
-  body: (model: string, system: string, user: string) => any
+  body: (model: string, system: string, user: string, maxTokens: number) => any
   // returns text delta from one parsed SSE json object, or ""
   delta: (j: any) => string
 }
 
-const OPENAI_COMPAT = (url: string): Endpoint => ({
+const OPENAI_COMPAT = (url: string, cap = 8000): Endpoint => ({
   url,
   headers: (key) => ({ Authorization: `Bearer ${key}`, "Content-Type": "application/json" }),
-  body: (model, system, user) => ({
+  body: (model, system, user, maxTokens) => ({
     model,
     stream: true,
+    // Per-provider output cap (DeepSeek hard-caps at 8192; groq/openrouter allow more), so a long
+    // paper isn't silently truncated. Prefer Anthropic for the fullest research paper.
+    max_tokens: Math.min(maxTokens, cap),
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
@@ -47,18 +50,19 @@ const ENDPOINTS: Record<string, Endpoint> = {
       "anthropic-version": "2023-06-01",
       "Content-Type": "application/json",
     }),
-    body: (model, system, user) => ({
+    // Claude 4.x supports large outputs, so honor the caller's request (paper uses ~16000).
+    body: (model, system, user, maxTokens) => ({
       model,
-      max_tokens: 3000,
+      max_tokens: maxTokens,
       stream: true,
       system,
       messages: [{ role: "user", content: user }],
     }),
     delta: (j) => (j?.type === "content_block_delta" ? (j.delta?.text ?? "") : ""),
   },
-  groq: OPENAI_COMPAT("https://api.groq.com/openai/v1/chat/completions"),
-  openrouter: OPENAI_COMPAT("https://openrouter.ai/api/v1/chat/completions"),
-  deepseek: OPENAI_COMPAT("https://api.deepseek.com/chat/completions"),
+  groq: OPENAI_COMPAT("https://api.groq.com/openai/v1/chat/completions", 16000),
+  openrouter: OPENAI_COMPAT("https://openrouter.ai/api/v1/chat/completions", 16000),
+  deepseek: OPENAI_COMPAT("https://api.deepseek.com/chat/completions", 8000),
 }
 
 // Single-shot streaming chat. No tools, no agent. Calls onDelta(text) as chunks arrive.
@@ -70,13 +74,14 @@ export async function streamChat(opts: {
   user: string
   signal: AbortSignal
   onDelta: (t: string) => void
+  maxTokens?: number
 }) {
   const ep = ENDPOINTS[opts.provider]
   if (!ep) throw new Error(`Unknown provider: ${opts.provider}`)
   const res = await fetch(ep.url, {
     method: "POST",
     headers: ep.headers(opts.apiKey),
-    body: JSON.stringify(ep.body(opts.model, opts.system, opts.user)),
+    body: JSON.stringify(ep.body(opts.model, opts.system, opts.user, opts.maxTokens ?? 8000)),
     signal: opts.signal,
   })
   if (!res.ok || !res.body) {

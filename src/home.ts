@@ -86,6 +86,8 @@ function render(p: vscode.WebviewPanel, tutorials: TutorialProvider) {
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 14px; }
   .card { background: #12181f; border: 1px solid #253039; border-radius: 12px; padding: 15px 17px; }
   .card.tut { border-color: #1f6f57; }
+  .card.cat { border-color: #30506e; cursor: pointer; }
+  .card.cat:hover { border-color: #2dd4bf; }
   .ctop { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
   .chip { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 12px;
     background: #10261f; color: #2dd4bf; border: 1px solid #1f6f57; }
@@ -105,7 +107,7 @@ function render(p: vscode.WebviewPanel, tutorials: TutorialProvider) {
   .foot { margin-top: 30px; color: #6e7b8a; font-size: 12px; }
   a { color: #2dd4bf; }
 </style></head><body>
-  <h1>GHBIO <span class="a">Co-Scientist</span></h1>
+  <h1>Bio<span class="a">IDE</span></h1>
   <div class="sub">단일세포 RNA 분석 작업실 · 튜토리얼을 열어 시작하거나, 내 프로젝트를 이어가세요.</div>
   <div class="actions">
     <button class="ghost" onclick="send('ghbio.newProject')">📁 새 프로젝트</button>
@@ -114,12 +116,28 @@ function render(p: vscode.WebviewPanel, tutorials: TutorialProvider) {
   </div>
 
   <h2>튜토리얼 (예제 분석)</h2>
-  <div class="grid">${tuts || '<div class="empty">설치된 튜토리얼이 없습니다.</div>'}</div>
+  <div class="grid">${tuts}
+    <div class="card cat" onclick="send('ghbio.openDatasetCatalog')" title="목록 보기">
+      <div class="ctop"><span class="chip gray">DATASETS</span><h3>Human Single Cell 3′ Gene Expression FASTQ datasets</h3></div>
+      <p>공개 10x Genomics 사람 3′ scRNA-seq FASTQ 데이터셋 목록 — 크기·chemistry·다운로드 링크를 표로 보여줍니다.</p>
+      <div class="cbtns"><button class="ghost">📋 목록 보기 (View list)</button></div>
+    </div>
+    <div class="card cat" onclick="send('ghbio.openAtlas','synthetic')" title="아틀라스 열기">
+      <div class="ctop"><span class="chip gray">ATLAS</span><h3>NSCLC 세포 아틀라스 · 합성 데이터 (Synthetic)</h3></div>
+      <p>비소세포폐암 종양미세환경의 단일세포 아틀라스 (합성 교육용 데이터) — UMAP·유전자 발현·마커 dot plot·조성 비교를 직접 탐색하고, 가이드 투어·개념 카드·실습 문제로 scRNA-seq 분석을 배웁니다.</p>
+      <div class="cbtns"><button class="ghost">🔬 아틀라스 열기 (Open explorer)</button></div>
+    </div>
+    <div class="card cat" onclick="send('ghbio.openAtlas','maynard')" title="아틀라스 열기">
+      <div class="ctop"><span class="chip gray">ATLAS · REAL</span><h3>NSCLC 아틀라스 · Maynard 2020 실제 데이터</h3></div>
+      <p>표적치료 중 폐선암(lung adenocarcinoma)의 실제 단일세포 데이터 (Maynard et al., Cell 2020) — scVI 재분석 21,620개 세포, Leiden 클러스터를 대표 마커로 명명, 조직축은 biopsy 부위. 실제 종양 데이터로 세포 유형·마커·조성을 탐색합니다.</p>
+      <div class="cbtns"><button class="ghost">🧬 실제 데이터 열기 (Open real data)</button></div>
+    </div>
+  </div>
 
   <h2>내 프로젝트</h2>
   <div class="grid">${projs}</div>
 
-  <div class="foot">GHBIO AI Co-Scientist · <a href="https://ghbio.co.kr/ghbio/sub0401.php">ghbio.co.kr</a></div>
+  <div class="foot">BioIDE · <a href="https://ghbio.co.kr/ghbio/sub0401.php">ghbio.co.kr</a></div>
   <script>
     const vscode = acquireVsCodeApi()
     function send(cmd, ...args){ vscode.postMessage({ cmd, args }) }

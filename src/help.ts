@@ -124,7 +124,7 @@ function html(pipe?: Pipeline): string {
 </style></head><body>
 <div class="wrap">
 
-  <h1>GHBIO <span class="a">Co-Scientist</span> 사용설명서</h1>
+  <h1>Bio<span class="a">IDE</span> 사용설명서</h1>
   <p class="lead">생물학 연구자를 위한 단일세포 RNA 분석 도우미 · 처음 쓰는 분을 위한 쉬운 안내서</p>
   <p class="lead" style="margin-top:6px">현재 튜토리얼: <b style="color:#2dd4bf">${tutName}</b> — 이 안내서의 <b>4번</b>과 <b>용어 사전</b>은 이 튜토리얼에 맞춰 표시됩니다.</p>
 
@@ -151,7 +151,7 @@ function html(pipe?: Pipeline): string {
   <!-- ============ 0 ============ -->
   <h2 id="s0"><span class="num">0</span>이 프로그램은 무엇인가요?</h2>
   <p>
-    <b>GHBIO Co-Scientist</b>는 단일세포 RNA 시퀀싱(scRNA-seq) 데이터를 분석하는 작업실입니다.
+    <b>BioIDE</b>는 단일세포 RNA 시퀀싱(scRNA-seq) 데이터를 분석하는 작업실입니다.
     유전자 서열 원본 파일(FASTQ)에서 시작해서, 세포별 유전자 개수 표를 만들고,
     비슷한 세포끼리 묶고(클러스터링), 각 세포가 어떤 종류인지 이름을 붙이고,
     마지막으로 <b>AI가 결과를 해석하고 연구 가설까지 제안</b>하는 것까지 한 번에 도와줍니다.
@@ -380,7 +380,7 @@ function html(pipe?: Pipeline): string {
     <dd>죽었거나 이상한 세포를 걸러내어 <b>믿을 만한 세포만 남기는 정리 과정</b>입니다.</dd>
     ${extraGlossary}
     <dt>확장 프로그램 (Extension)</dt>
-    <dd>기본 작업실에 <b>기능을 더해주는 추가 부품</b>입니다. 이 <b>GHBIO Co-Scientist</b> 자체가 그런 부품이며, 이미 설치되어 있으니 <b>따로 신경 쓸 필요가 없습니다.</b></dd>
+    <dd>기본 작업실에 <b>기능을 더해주는 추가 부품</b>입니다. 이 <b>BioIDE</b> 자체가 그런 부품이며, 이미 설치되어 있으니 <b>따로 신경 쓸 필요가 없습니다.</b></dd>
   </dl>
 
   <!-- ============ 8 ============ -->
@@ -401,7 +401,7 @@ function html(pipe?: Pipeline): string {
     <div class="ans">데이터 내려받기와 유전체 색인 만들기는 <b>수십 분</b> 걸릴 수 있습니다. 터미널에 글자 움직임이 있으면 정상입니다. 창을 닫지 마세요.</div></div>
 
   <div class="foot">
-    GHBIO AI Co-Scientist · 도움이 더 필요하시면 관리자에게 문의하세요 ·
+    BioIDE · 도움이 더 필요하시면 관리자에게 문의하세요 ·
     <a href="https://ghbio.co.kr/ghbio/sub0401.php">ghbio.co.kr</a>
   </div>
 

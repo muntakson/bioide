@@ -19,13 +19,14 @@ cat > ".vsix-build/[Content_Types].xml" <<'XML'
 <Default Extension="svg" ContentType="image/svg+xml"/><Default Extension="md" ContentType="text/markdown"/>
 <Default Extension="sh" ContentType="text/plain"/><Default Extension="py" ContentType="text/plain"/>
 <Default Extension="txt" ContentType="text/plain"/><Default Extension="map" ContentType="application/json"/>
+<Default Extension="css" ContentType="text/css"/><Default Extension="bin" ContentType="application/octet-stream"/>
 <Default Extension="vsixmanifest" ContentType="text/xml"/></Types>
 XML
 cat > .vsix-build/extension.vsixmanifest <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
 <Metadata><Identity Language="en-US" Id="ghbio-coscientist" Version="$VER" Publisher="ghbio"/>
-<DisplayName>GHBIO Co-Scientist</DisplayName><Description xml:space="preserve">scRNA-seq bioinformatics workbench</Description>
+<DisplayName>BioIDE</DisplayName><Description xml:space="preserve">scRNA-seq bioinformatics workbench</Description>
 <Categories>Data Science,Other</Categories></Metadata>
 <Installation><InstallationTarget Id="Microsoft.VisualStudio.Code"/></Installation>
 <Dependencies/><Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/></Assets>

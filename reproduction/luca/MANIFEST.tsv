@@ -1,0 +1,11 @@
+component	pinned_value	provenance
+paper	10.1016/j.ccell.2022.10.008	Salcher et al., Cancer Cell (2022)
+author_workflow_repository	https://github.com/icbi-lab/luca	LuCA source repository
+author_workflow_commit	a3c018451850fbb50b674bb606ea7348182420cb	cloned 2026-07-12
+zenodo_record	7227571	immutable author workflow/data record
+nextflow_version	22.04.5	authors' README
+containers.tar.xz	md5:1603e7fc78a194729256d4bc62903073	Zenodo record 7227571
+input_data.tar.xz	md5:e0ae48e02595cad4bda6fe42ae0518ea	Zenodo record 7227571
+core_atlas_scanvi_model.tar.gz	md5:da8f1f93a984f700a2a21c1233d68310	Zenodo record 7227571
+build_atlas_results.tar.xz	md5:bb3147b82715fb6be32f868cceee5ac6	Zenodo record 7227571
+downstream_analyses_results.tar.xz	md5:6d6e76d7f5b71f8c5f507d0561e94786	Zenodo record 7227571

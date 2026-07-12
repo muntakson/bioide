@@ -1,8 +1,8 @@
 {
   "name": "ghbio-coscientist",
-  "displayName": "GHBIO Co-Scientist",
+  "displayName": "BioIDE",
   "description": "PlatformIO-style scRNA-seq bioinformatics IDE — projects, libraries, tutorials, and reliable single-shot AI analysis.",
-  "version": "0.5.1",
+  "version": "0.8.5",
   "publisher": "ghbio",
   "engines": {
     "vscode": "^1.85.0"
@@ -22,31 +22,35 @@
       "activitybar": [
         {
           "id": "ghbio",
-          "title": "GHBIO Co-Scientist",
+          "title": "BioIDE",
           "icon": "media/ghbio-activity.svg"
+        },
+        {
+          "id": "ghbioTerminal",
+          "title": "GHBIO SSH Terminal",
+          "icon": "media/terminal.svg"
         }
       ]
     },
     "views": {
       "ghbio": [
         {
-          "id": "ghbio.tutorials",
-          "name": "Pipelines"
-        },
+          "id": "ghbio.home",
+          "name": "BioIDE"
+        }
+      ],
+      "ghbioTerminal": [
         {
-          "id": "ghbio.projects",
-          "name": "Projects"
-        },
-        {
-          "id": "ghbio.libraries",
-          "name": "Libraries"
+          "id": "ghbio.terminal",
+          "name": "SSH Terminal",
+          "type": "webview"
         }
       ]
     },
     "viewsWelcome": [
       {
-        "view": "ghbio.tutorials",
-        "contents": "GHBIO Co-Scientist — scRNA-seq workbench.\n[$(run-all) 전체 분석 실행 (Run full scRNA-seq analysis)](command:ghbio.runPipeline)\n[$(question) 사용설명서 (Help)](command:ghbio.openHelp)\n[$(home) Open GHBIO Home](command:ghbio.openHome)\n[$(sparkle) AI Analysis](command:ghbio.openAI)"
+        "view": "ghbio.home",
+        "contents": "BioIDE — scRNA-seq workbench.\n\n모든 파이프라인·프로젝트·라이브러리는 홈 화면에서 관리합니다.\n(Manage pipelines, projects and libraries from the Home page.)\n[$(home) GHBIO 홈 열기 (Open GHBIO Home)](command:ghbio.openHome)\n[$(sparkle) AI Analysis](command:ghbio.openAI)\n[$(question) 사용설명서 (Help)](command:ghbio.openHelp)"
       }
     ],
     "commands": [
@@ -110,81 +114,57 @@
       {
         "command": "ghbio.runStepById",
         "title": "GHBIO: Run pipeline step"
+      },
+      {
+        "command": "ghbio.openDatasetCatalog",
+        "title": "GHBIO: Open 10x dataset catalog"
+      },
+      {
+        "command": "ghbio.openAtlas",
+        "title": "GHBIO: Open NSCLC cell atlas explorer",
+        "icon": "$(graph-scatter)"
+      },
+      {
+        "command": "ghbio.writePaper",
+        "title": "GHBIO: 과학논문 작성 (Write science paper)"
+      },
+      {
+        "command": "ghbio.openTerminal",
+        "title": "GHBIO: Open SSH Terminal",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "ghbio.restartTerminal",
+        "title": "GHBIO: Restart SSH Terminal",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "ghbio.runPipeline",
-          "when": "view == ghbio.tutorials",
+          "command": "ghbio.openHome",
+          "when": "view == ghbio.home",
           "group": "navigation@0"
         },
         {
-          "command": "ghbio.openHome",
-          "when": "view == ghbio.tutorials",
-          "group": "navigation@1"
-        },
-        {
           "command": "ghbio.openAI",
-          "when": "view == ghbio.tutorials",
-          "group": "navigation@2"
-        },
-        {
-          "command": "ghbio.openHelp",
-          "when": "view == ghbio.tutorials",
-          "group": "navigation@9"
-        },
-        {
-          "command": "ghbio.newProject",
-          "when": "view == ghbio.projects",
+          "when": "view == ghbio.home",
           "group": "navigation@1"
         },
         {
           "command": "ghbio.openHelp",
-          "when": "view == ghbio.projects",
+          "when": "view == ghbio.home",
           "group": "navigation@9"
         },
         {
-          "command": "ghbio.refresh",
-          "when": "view == ghbio.libraries",
-          "group": "navigation@1"
-        },
-        {
-          "command": "ghbio.openHelp",
-          "when": "view == ghbio.libraries",
-          "group": "navigation@9"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "ghbio.openDashboard",
-          "when": "view == ghbio.tutorials && viewItem == pipeline",
-          "group": "inline"
-        },
-        {
-          "command": "ghbio.runStep",
-          "when": "view == ghbio.tutorials && viewItem == step",
-          "group": "inline"
-        },
-        {
-          "command": "ghbio.installLibrary",
-          "when": "view == ghbio.libraries && viewItem == library",
-          "group": "inline"
-        },
-        {
-          "command": "ghbio.openDashboard",
-          "when": "view == ghbio.projects && viewItem == project",
-          "group": "inline"
-        },
-        {
-          "command": "ghbio.openProject",
-          "when": "view == ghbio.projects && viewItem == project",
-          "group": "inline"
+          "command": "ghbio.restartTerminal",
+          "when": "view == ghbio.terminal",
+          "group": "navigation@0"
         }
       ]
     },
     "configuration": {
-      "title": "GHBIO Co-Scientist",
+      "title": "BioIDE",
       "properties": {
         "ghbio.modulesDir": {
           "type": "string",
@@ -215,6 +195,21 @@
           "type": "boolean",
           "default": true,
           "description": "Open the GHBIO Home dashboard (tutorial & project overview) automatically when the workbench starts, like PlatformIO Home."
+        },
+        "ghbio.terminalCommand": {
+          "type": "string",
+          "default": "bash -il",
+          "description": "Command run in the GHBIO SSH Terminal (side bar). Defaults to a login shell on this box — the same machine the browser IDE runs on. Point it at e.g. 'ssh -tt user@host' to attach to a different host instead."
+        },
+        "ghbio.terminalCwd": {
+          "type": "string",
+          "default": "~/ghbio-coscientist",
+          "description": "Stable working directory for the GHBIO SSH Terminal (side bar) — the codebase you edit. It does NOT follow the selected pipeline; the bottom panel work terminal does. Empty = home. Supports a leading ~."
+        },
+        "ghbio.openTerminalOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reveal the GHBIO SSH Terminal automatically when the workbench starts, so the persistent shell is ready."
         }
       }
     }
@@ -226,8 +221,13 @@
   },
   "devDependencies": {
     "@types/node": "^18.19.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
     "@types/vscode": "^1.85.0",
     "esbuild": "^0.23.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.6",
     "typescript": "^5.4.0"
   }
 }

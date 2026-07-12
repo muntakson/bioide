@@ -2,6 +2,7 @@ import * as vscode from "vscode"
 import * as fs from "fs"
 import * as path from "path"
 import { runShellTask, tutorialProjectDir, tutorialResultsDir, expandHome } from "./util"
+import type { AiConfig } from "./modules"
 
 // =============================================================================
 // A pipeline as a DEEP MODULE engine.
@@ -37,6 +38,26 @@ export interface PipelineHelp {
   glossary?: { term: string; def: string }[] // domain-specific terms appended to the shared glossary
 }
 
+// Provenance for the "프로젝트 정보 (Project info)" dashboard card — declared in pipeline.json so
+// each dataset documents where its raw data came from without any TypeScript change.
+export interface DataSource {
+  provider?: string // e.g. "10x Genomics"
+  dataset?: string // human dataset name
+  datasetUrl?: string // dataset landing page
+  fastqUrl?: string // the actual FASTQ download (tar) URL
+  size?: string // e.g. "~19 GB"
+  note?: string // any extra ko note
+  // Local download target, so the dashboard can show a live download-progress log.
+  download?: {
+    tar: string // path to the downloading .tar/.bam (supports leading ~)
+    totalBytes?: number // expected final size, for a % readout
+    extracted?: string // a path that exists once extraction is done (marks "complete")
+    // Optional post-download conversion phase (e.g. BAM→FASTQ): `watch` is an output file whose
+    // growth shows conversion progress; while it's being actively written the box shows "converting".
+    convert?: { watch: string }
+  }
+}
+
 export interface Pipeline {
   id: string
   name: string
@@ -44,6 +65,10 @@ export interface Pipeline {
   dir: string
   stages: Stage[]
   help?: PipelineHelp
+  dataSource?: DataSource
+  // A pipeline can replace a module-wide AI prompt set when its biology differs
+  // materially (e.g. lung cancer rather than PBMC), while reusing the module UI.
+  ai?: Partial<AiConfig>
 }
 
 // Parse a pipeline folder. Accepts pipeline.json (preferred) or the legacy
@@ -54,7 +79,16 @@ export function loadPipelineFromDir(dir: string): Pipeline | undefined {
     if (!fs.existsSync(f)) continue
     try {
       const m = JSON.parse(fs.readFileSync(f, "utf8"))
-      return { id: m.id, name: m.name, summary: m.summary, dir, stages: m.stages ?? m.steps ?? [], help: m.help }
+      return {
+        id: m.id,
+        name: m.name,
+        summary: m.summary,
+        dir,
+        stages: m.stages ?? m.steps ?? [],
+        help: m.help,
+        dataSource: m.dataSource,
+        ai: m.ai,
+      }
     } catch (e) {
       vscode.window.showErrorMessage(`GHBIO: bad ${fn} in ${path.basename(dir)}: ${e}`)
       return undefined
