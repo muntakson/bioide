@@ -12,6 +12,7 @@ import { openPaperWriter } from "./paper"
 import { TerminalViewProvider } from "./terminal"
 import { registerWorkTerminal, showWorkFolder } from "./workterminal"
 import { openDatasetCatalog } from "./catalog"
+import { openCreatePipeline } from "./createPipeline"
 import { openAtlas } from "./atlas"
 import { runPipeline } from "./pipeline"
 import { loadModules, findPipeline, defaultPipeline } from "./modules"
@@ -108,6 +109,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand("ghbio.openHome", () => openHome(context, tutorials)),
     vscode.commands.registerCommand("ghbio.openDatasetCatalog", () => openDatasetCatalog()),
+    vscode.commands.registerCommand("ghbio.openCreatePipeline", () => openCreatePipeline(context)),
     vscode.commands.registerCommand("ghbio.openAtlas", (key?: string) => openAtlas(context, key)),
     vscode.commands.registerCommand("ghbio.openHelp", () => openHelp(context, activePipelineId)),
     vscode.commands.registerCommand("ghbio.openAI", () => openAI(context)),

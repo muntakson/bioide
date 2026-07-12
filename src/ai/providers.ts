@@ -75,13 +75,22 @@ export async function streamChat(opts: {
   signal: AbortSignal
   onDelta: (t: string) => void
   maxTokens?: number
+  // Anthropic-only: enable the server-side web_search tool. It runs INSIDE this single streaming
+  // response (Anthropic performs the search and the model keeps writing) — no client tool loop, so
+  // the no-agent design holds. Ignored for OpenAI-compatible providers. Text still streams as
+  // content_block_delta, so the existing delta parser is unaffected.
+  webSearch?: boolean
 }) {
   const ep = ENDPOINTS[opts.provider]
   if (!ep) throw new Error(`Unknown provider: ${opts.provider}`)
+  const body = ep.body(opts.model, opts.system, opts.user, opts.maxTokens ?? 8000)
+  if (opts.webSearch && opts.provider === "anthropic") {
+    body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 6 }]
+  }
   const res = await fetch(ep.url, {
     method: "POST",
     headers: ep.headers(opts.apiKey),
-    body: JSON.stringify(ep.body(opts.model, opts.system, opts.user, opts.maxTokens ?? 8000)),
+    body: JSON.stringify(body),
     signal: opts.signal,
   })
   if (!res.ok || !res.body) {

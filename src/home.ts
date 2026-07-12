@@ -88,6 +88,9 @@ function render(p: vscode.WebviewPanel, tutorials: TutorialProvider) {
   .card.tut { border-color: #1f6f57; }
   .card.cat { border-color: #30506e; cursor: pointer; }
   .card.cat:hover { border-color: #2dd4bf; }
+  .card.create { border-color: #7c3aed; cursor: pointer; background: linear-gradient(135deg,#141024,#12181f); }
+  .card.create:hover { border-color: #a78bfa; }
+  .chip.create { background:#1e1233; color:#c4b5fd; border:1px solid #7c3aed; }
   .ctop { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
   .chip { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 12px;
     background: #10261f; color: #2dd4bf; border: 1px solid #1f6f57; }
@@ -116,7 +119,12 @@ function render(p: vscode.WebviewPanel, tutorials: TutorialProvider) {
   </div>
 
   <h2>튜토리얼 (예제 분석)</h2>
-  <div class="grid">${tuts}
+  <div class="grid">
+    <div class="card create" onclick="send('ghbio.openCreatePipeline')" title="논문으로 파이프라인 만들기">
+      <div class="ctop"><span class="chip create">CREATE</span><h3>➕ 파이프라인 만들기 (Create pipeline)</h3></div>
+      <p>암 연구에서 scRNA-seq로 <b>의미 있는 발견</b>을 한 논문을 AI가 찾아 줍니다(원본 데이터 공개가 필수, 코드 공개면 가점). 마음에 드는 논문에서 <b>design pipeline</b>을 누르면, 그 워크플로를 <b>최신 AI·GPU·Python(R 대신)</b>으로 재현하고 <b>독립적 데이터 처리로 결론을 검증</b>하는 튜토리얼 계획을 만들어 줍니다.</p>
+      <div class="cbtns"><button>🔎 논문 찾기 → 설계 (Find paper → design)</button></div>
+    </div>${tuts}
     <div class="card cat" onclick="send('ghbio.openDatasetCatalog')" title="목록 보기">
       <div class="ctop"><span class="chip gray">DATASETS</span><h3>Human Single Cell 3′ Gene Expression FASTQ datasets</h3></div>
       <p>공개 10x Genomics 사람 3′ scRNA-seq FASTQ 데이터셋 목록 — 크기·chemistry·다운로드 링크를 표로 보여줍니다.</p>

@@ -47,6 +47,7 @@ export interface DataSource {
   fastqUrl?: string // the actual FASTQ download (tar) URL
   size?: string // e.g. "~19 GB"
   note?: string // any extra ko note
+  rationale?: string // why THIS paper/dataset was chosen for the tutorial (shown on the info card)
   // Local download target, so the dashboard can show a live download-progress log.
   download?: {
     tar: string // path to the downloading .tar/.bam (supports leading ~)

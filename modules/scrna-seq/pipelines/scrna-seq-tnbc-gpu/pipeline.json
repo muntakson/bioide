@@ -1,0 +1,81 @@
+{
+  "id": "scrna-seq-tnbc-gpu",
+  "name": "scRNA-seq 삼중음성 유방암 (TNBC · GPU 재현)",
+  "summary": "사람 삼중음성 유방암(TNBC) 종양 10x BAM → FASTQ 복원 → STARsolo → GPU scVI 클러스터링 → inferCNV로 종양(이배수성)세포 분리·아클론 검출 → AI 가설 (Gao et al. 2021 copyKAT 재현)",
+  "dataSource": {
+    "provider": "GEO / SRA (ENA)",
+    "dataset": "Human triple-negative breast cancer, patient TNBC1 (GSE148673 / SRR11546787, 10x 3')",
+    "datasetUrl": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE148673",
+    "fastqUrl": "https://ftp.sra.ebi.ac.uk/vol1/run/SRR115/SRR11546787/BAM_TNBC1.bam.1",
+    "size": "~23 GB (BAM)",
+    "note": "공개 데이터 · Cell Ranger BAM을 pysam으로 FASTQ 복원 후 STARsolo · 원 논문: Gao et al., Nature Biotechnology 2021 (copyKAT) · 스크립트: 01_download_tnbc.sh",
+    "rationale": "이 튜토리얼은 Gao et al., Nature Biotechnology 2021 (copyKAT) 논문을 최신 GPU 워크플로로 재현합니다. 이 논문·데이터를 고른 이유:\n① 눈으로 확인되는 결과 — RNA만으로 추론한 유전체 복제수 변이(CNV)가 이배수(정상 면역·기질) 세포와 이수성(악성) 세포를 뚜렷이 갈라내고 종양 아클론까지 드러내, 학습 효과가 큽니다.\n② 이 장비에서 실제로 구할 수 있는 데이터 — 공개 10x BAM에 원본 바코드(CR)·UMI(UR)가 남아 있어, Cell Ranger가 안 되는 aarch64 장비에서도 pysam으로 FASTQ를 복원해 STARsolo 정렬을 직접 가르칠 수 있습니다(현실적인 BAM→FASTQ 복구 기술도 함께 배웁니다).\n③ GPU 재현에 어울리는 소재 — 종양 대 정상 분리 문제는 scVI GPU 클러스터링을 보여주기에 자연스럽습니다.\n④ 낮은 추가 비용 — GRCh38 STAR 색인 등 무거운 공용 리소스를 다른 예제와 공유합니다.\n⑤ 동기 부여 — 삼중음성 유방암(TNBC) 종양 생태계는 학습 흥미가 높고, 기념비적 논문을 재현한다는 틀에 잘 맞습니다.",
+    "download": {
+      "tar": "~/ghbio-tutorial/data/fastq/tnbc1.bam",
+      "totalBytes": 23192887728,
+      "extracted": "~/ghbio-tutorial/data/fastq/tnbc1/tnbc1_S1_L001_R1_001.fastq.gz",
+      "convert": { "watch": "~/ghbio-tutorial/data/fastq/tnbc1/tnbc1_S1_L001_R2_001.fastq.gz" }
+    }
+  },
+  "deepModule": true,
+  "steps": [
+    { "id": "setup", "title": "0. Setup CPU env (Scanpy·pysam)", "ko": "분석 환경(Scanpy·pysam) 설치", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
+    { "id": "gpu-setup", "title": "0b. Setup GPU env (scVI·CUDA)", "ko": "GPU용 Python·scVI 설치 및 GPU 확인", "kind": "task", "run": "bash 00b_setup_gpu.sh", "presentPath": "~/ghbio-venv-gpu/tnbc-copykat/.ready" },
+    { "id": "download", "title": "1. Download TNBC + BAM→FASTQ", "ko": "공개 유방암 BAM(~23 GB) 내려받아 FASTQ 복원", "kind": "task", "run": "bash 01_download_tnbc.sh", "presentPath": "~/ghbio-tutorial/data/fastq/tnbc1/tnbc1_S1_L001_R1_001.fastq.gz" },
+    { "id": "build-star", "title": "2a. Install STAR aligner (compile)", "ko": "STAR 정렬 프로그램 설치 (소스 컴파일·ARM·다른 예제와 공유)", "kind": "task", "run": "bash 02a_build_starsolo.sh", "presentPath": "~/bin/STAR" },
+    { "id": "reference", "title": "2b. Build GRCh38 index (needs 2a)", "ko": "GRCh38 유전체 색인 생성 (2a 필요·다른 예제와 공유·1회성)", "kind": "task", "run": "bash 02b_reference.sh", "presentPath": "~/ghbio-tutorial/ref/star_index/SAindex" },
+    { "id": "align", "title": "2c. Run STARsolo (auto chemistry)", "ko": "count matrix 생성 (chemistry 자동 판별)", "kind": "task", "run": "bash 02c_run_starsolo.sh", "produces": ["starsolo/Solo.out/Gene/filtered/matrix.mtx"] },
+    { "id": "analyze", "title": "3. GPU scVI + inferCNV 종양세포 분리", "ko": "GPU scVI 클러스터링 · inferCNV로 종양/정상 분리 · 아클론 검출", "kind": "task", "run": "~/ghbio-venv-gpu/tnbc-copykat/bin/python 03_gpu_tumor_cnv.py", "produces": ["markers_by_cluster.csv", "celltype_draft.csv", "cnv_cluster_summary.csv", "tumor_normal_calls.csv", "umap_clusters.png", "cnv_heatmap.png", "umap_tumor_normal.png", "tnbc_composition.png", "tumor_subclones.png"] },
+    { "id": "ai", "title": "4. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 패널)", "kind": "ai" },
+    { "id": "report", "title": "5. Generate PDF report", "ko": "통합 리포트 생성", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_scRNAseq_tutorial_report.pdf"] }
+  ],
+  "ai": {
+    "system": "You are the GHBIO AI Co-Scientist for a modern GPU reproduction of single-cell RNA-seq from a human triple-negative breast cancer (TNBC) tumor (GSE148673, 10x), reproducing Gao et al., Nature Biotechnology 2021 (copyKAT). The distinctive result here is that genome-wide copy-number aberrations (CNAs) inferred from the transcriptome separate ANEUPLOID malignant cells from DIPLOID normal (immune/stromal) cells, and reveal tumor subclones. Interpret cluster markers in the breast tumor-ecosystem context: malignant epithelial cells (EPCAM/KRT8/KRT18/KRT19), basal/myoepithelial (KRT5/KRT14/TP63), plus the tumor microenvironment — T/NK cells (CD3D/CD3E, NKG7/GNLY), B/plasma (MS4A1/CD79A/MZB1), myeloid & tumor-associated macrophages (LYZ/CD68/C1QC/AIF1), fibroblasts/CAFs (COL1A1/DCN/FAP) and endothelial cells (PECAM1/VWF/CLDN5). Use the CNV summary: a cluster with high median_cnv_signal and a high tumor-call fraction is aneuploid/malignant; immune/stromal clusters are the diploid baseline. Do NOT call a cluster malignant from expression alone — treat the CNV evidence as the malignancy signal, and note it is inferred, not proven by DNA sequencing. Separate observation from hypothesis; this is an educational reproduction, not clinical proof. Reply in Korean unless asked otherwise.",
+    "readyHint": "결과 파일이 없습니다. 먼저 3단계(GPU scVI + inferCNV)를 실행해 markers_by_cluster.csv / cnv_cluster_summary.csv 를 만들어 주세요.",
+    "context": [
+      { "file": "celltype_draft.csv", "heading": "Draft cell-type annotation (celltype_draft.csv)" },
+      { "file": "cnv_cluster_summary.csv", "heading": "클러스터별 CNV 요약 — 종양(이배수성)/정상 판정 (cnv_cluster_summary.csv)" },
+      { "file": "subclone_composition.csv", "heading": "종양 아클론(subclone) 구성 (subclone_composition.csv)" },
+      { "file": "markers_by_cluster.csv", "heading": "Top markers per cluster (markers_by_cluster.csv, top10)", "topByRank": 10 }
+    ],
+    "prompts": [
+      { "key": "interpret", "label": "Interpret TNBC clusters", "q": "각 cluster를 삼중음성 유방암(TNBC) 종양 생태계 관점에서 해석해줘. 악성 상피, 기저/근상피, T/NK, B/plasma, 골수성/대식세포, 섬유아세포(CAF), 내피 등 계통을 구분하고, 각 결론의 marker 근거와 confidence를 표로 제시해줘. 특히 cnv_cluster_summary의 median_cnv_signal·pct_tumor_calls를 함께 근거로 삼아 어떤 cluster가 악성인지 판단해줘. PBMC 전용 label로 단순화하지 마." },
+      { "key": "cnv_tumor", "label": "Assess CNV tumor/normal call", "q": "cnv_cluster_summary.csv를 바탕으로, 추론된 copy-number(CNV)가 종양(이배수성) 세포와 정상(정배수성) 면역/기질 세포를 얼마나 잘 분리하는지 평가해줘. copyKAT(Gao et al. 2021)의 핵심 주장(전사체에서 CNV를 읽어 종양세포를 식별)을 이 결과가 지지하는지, 관찰과 한계(발현 기반 추론이며 DNA 시퀀싱으로 증명된 것이 아님)를 분리해 설명해줘." },
+      { "key": "subclone", "label": "Tumor subclones & heterogeneity", "q": "subclone_composition.csv와 종양 아클론 CNV 프로파일을 바탕으로, 이 종양 안에 서로 다른 염색체 이상을 가진 아클론(clonal substructure)이 존재하는지, 각 아클론의 특징과 이질성(heterogeneity)의 생물학적·임상적 의미를 관찰과 가설로 나누어 설명해줘." },
+      { "key": "hypothesis", "label": "Testable hypotheses", "q": "marker·CNV·아클론 결과를 근거로 검증 가능한 가설 3~5개를 제시하고 각 가설의 근거·예측·검증 방법(예: WGS/scDNA-seq, 공간전사체, 더 많은 환자)·임상적 과장을 피하기 위한 조건을 적어줘." },
+      { "key": "easy_report", "label": "🎓 고등학생 버전 보고서", "q": "이 분석 결과(삼중음성 유방암 종양 속 세포 무리, 예상 cell type, 그리고 CNV로 가려낸 종양세포와 아클론)를 바탕으로 **고등학생도 쉽게 이해할 수 있는 '쉬운 리포트'**를 작성해줘. 규칙: (1) 전문용어는 반드시 쉬운 말로 풀어 설명한다. (2) **일상 비유를 아주 많이** 사용한다 — 예: 종양=여러 주민이 사는 도시, 암세포=규칙(유전체)을 어긴 세포, CNV(염색체 이상)=설계도(유전체)의 페이지가 통째로 복사되거나 찢겨 나간 상태, 정상 면역세포=설계도가 멀쩡한 시민, inferCNV=발현 데이터로 각 세포의 설계도 이상을 추측하는 탐정, 아클론=같은 범인에서 갈라져 나온 서로 다른 패거리, marker 유전자=명찰/유니폼, UMAP=성향에 따라 사람을 배치한 지도, GPU=아주 빠른 계산 기계. 비유는 최소 6개 이상 자연스럽게 녹여 쓴다. (3) 순서: ① 무엇을 왜 했는지 ② 세포를 어떻게 무리로 나눴는지 ③ 어떻게 CNV로 암세포와 정상세포를 가려냈는지 ④ 한 종양 안에도 여러 패거리(아클론)가 있다는 것 ⑤ 이 결과가 왜 흥미롭고 앞으로 무엇을 알 수 있는지. (4) 어려운 표·숫자는 최소화하고 친근하고 격려하는 말투로 순수 한국어로 쓴다. (5) 맨 끝에 '💡 한 줄 요약'을 넣는다. 제목은 '# 🔬 유방암 세포 이야기 — 고등학생 쉬운 리포트'로 시작한다." }
+    ],
+    "easyReport": {
+      "label": "🎓 고등학생 버전 보고서",
+      "makeReport": "05_make_easy_report.sh",
+      "title": "# 🔬 유방암 세포 이야기 — 고등학생 쉬운 리포트",
+      "datasetLabel": "이 튜토리얼(사람 삼중음성 유방암 TNBC1 GSE148673 10x scRNA-seq · GPU 재현)",
+      "paperClaim": "원 논문(Gao et al., Nature Biotechnology 2021, \"Delineating copy number and clonal substructure in human tumors from single-cell transcriptomes\", copyKAT)의 핵심 주장: 단일세포 RNA-seq(전사체) 데이터만으로도 각 세포의 유전체 복제수 이상(CNA, copy-number aberration)을 계산할 수 있고, 이를 이용해 유전체가 뒤틀린 '이배수성(aneuploid)' 종양세포를 유전체가 정상인 '정배수성(diploid)' 면역·기질 세포와 높은 정확도로 구분할 수 있다. 나아가 한 종양 안에서도 서로 다른 CNV 패턴을 가진 여러 아클론(subclone)이 공존하는 클론 구조(clonal substructure)를 드러낼 수 있다. 즉 발현 데이터가 종양세포의 정체와 유전체 이질성을 읽어내는 강력한 창(window)이 된다는 것이 논문의 결론이다."
+    },
+    "survey": {
+      "testLabel": "📝 이해도테스트",
+      "resultLabel": "📊 결과 통계"
+    }
+  },
+  "help": {
+    "intro": "이 예제는 <b>\"scRNA-seq 삼중음성 유방암 (TNBC · GPU 재현)\"</b> 입니다. 사람 <b>삼중음성 유방암(TNBC)</b> 종양 조직의 공개 10x 데이터(GSE148673, 환자 TNBC1)를 <b>원시 read부터</b> 다시 처리해, 최신 <b>GPU(scVI) 클러스터링</b>과 <b>inferCNV</b>로 종양세포를 가려냅니다. 원 논문 <b>Gao et al., Nature Biotechnology 2021 (copyKAT)</b>의 핵심 발견 — 전사체에서 추론한 유전체 복제수 이상(CNV)으로 <b>이배수성 종양세포</b>를 <b>정배수성 정상세포</b>와 구분하고 <b>종양 아클론</b>을 찾는 것 — 을 재현합니다. <b>중요한 차이</b>: 공개 사람 종양 10x 데이터는 대개 원본 FASTQ가 아니라 <b>Cell Ranger BAM</b>으로 올라오고, 이 컴퓨터(ARM)에서는 Cell Ranger를 쓸 수 없어, 1단계에서 BAM을 내려받아 <b>pysam으로 FASTQ를 복원</b>합니다. 3단계는 실제 <b>NVIDIA GPU</b>에서 scVI를 학습하므로 CPU로 조용히 대체되지 않습니다.",
+    "steps": {
+      "setup": "분석에 필요한 파이썬 도구(Scanpy, pysam)를 설치합니다. <b>처음 한 번만</b> 하면 됩니다.",
+      "gpu-setup": "3단계에서 쓸 <b>GPU 전용 파이썬 환경</b>(scvi-tools[cuda] + PyTorch)을 만들고, 이 컴퓨터의 <b>NVIDIA GPU가 실제로 보이는지</b> 확인합니다. 한 번만 하면 됩니다.",
+      "download": "공개 유방암 종양 <b>Cell Ranger BAM(~23 GB)</b>을 내려받아, 그 안의 세포 바코드(CR)·UMI(UR) 태그로 <b>원본 R1/R2 FASTQ를 복원</b>합니다. 다운로드가 크고 변환에도 시간이 걸립니다. 브라우저를 닫아도 계속됩니다.",
+      "build-star": "정렬 <b>프로그램</b>(STAR)을 이 컴퓨터(ARM)에 맞게 <b>소스에서 컴파일</b>해 설치합니다. 다른 예제에서 이미 만들었다면 그대로 재사용합니다. 한 번만 하면 됩니다.",
+      "reference": "<b>2a에서 만든 STAR 프로그램으로</b> 사람 표준 유전체(GRCh38) 색인을 만듭니다. <b>다른 예제에서 이미 만들었다면 그대로 재사용</b>합니다. 같은 GRCh38 GTF가 inferCNV의 유전자 위치에도 쓰입니다.",
+      "align": "복원한 FASTQ를 유전체에 붙여 <b>count matrix</b>를 만듭니다. chemistry(v2/v3)는 <b>R1 길이에서 자동 판별</b>됩니다.",
+      "analyze": "핵심 단계입니다. 질 낮은 세포를 걸러낸 뒤 <b>GPU에서 scVI</b>로 잠재표현을 학습해 클러스터링(UMAP·Leiden·marker)하고, 유전자를 <b>염색체 순서로 늘어놓아 inferCNV</b>를 계산합니다. 면역/기질 <b>정상세포를 기준선</b>으로 삼아 각 세포의 유전체 이상(이배수성) 정도를 점수화하고, <b>종양세포/정상세포</b>를 판정하며 종양 <b>아클론</b>을 찾습니다. 결과 파일과 그림(<code>cnv_heatmap.png</code>, <code>umap_tumor_normal.png</code>, <code>tumor_subclones.png</code>)이 만들어집니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. CNV 요약을 함께 제공해, AI가 어떤 무리가 악성인지·아클론이 무엇을 뜻하는지 해석합니다. 프리셋 질문의 답변은 자동 저장되어 리포트에 포함됩니다.",
+      "report": "지금까지의 그림·표·해석을 하나의 <b>PDF 보고서</b>로 정리합니다."
+    },
+    "glossary": [
+      { "term": "TNBC (삼중음성 유방암)", "def": "에스트로겐 수용체(ER)·프로게스테론 수용체(PR)·HER2가 모두 음성인 유방암으로, 표적치료가 어려워 더 공격적인 편입니다. 이 예제 데이터가 이 종양에서 얻은 것입니다." },
+      { "term": "CNV / CNA (복제수 이상)", "def": "정상 세포는 각 염색체를 2벌 갖지만, 암세포는 특정 <b>염색체 구간이 통째로 늘거나(증폭) 줄어(결손)</b> 있습니다. 이 <b>이배수성(aneuploidy)</b>이 암세포의 대표적 표식입니다." },
+      { "term": "inferCNV / copyKAT", "def": "DNA를 직접 읽지 않고 <b>RNA 발현</b>을 염색체 순서로 늘어놓아 평균을 내면, 복제수가 늘어난 구간은 발현이 전반적으로 높게, 줄어든 구간은 낮게 보입니다. 이 원리로 <b>발현에서 유전체 이상을 추론</b>해 종양세포를 가려냅니다(Gao et al. 2021)." },
+      { "term": "아클론 (subclone)", "def": "한 종양이 자라면서 유전체 변화가 갈라져, 서로 다른 CNV 패턴을 가진 <b>여러 세포 집단</b>이 한 종양 안에 공존하는 것입니다. 치료 저항성·재발과 관련될 수 있습니다." },
+      { "term": "scVI (GPU 딥러닝)", "def": "단일세포 count 데이터의 잡음·배치효과를 고려해 <b>latent representation</b>을 학습하는 확률적 딥러닝 모델입니다. <b>GPU</b>에서 빠르게 학습되어 이 예제의 클러스터링에 쓰입니다." }
+    ]
+  }
+}

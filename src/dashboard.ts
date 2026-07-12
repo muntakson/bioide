@@ -43,6 +43,10 @@ export function openDashboard(context: vscode.ExtensionContext, target?: Dashboa
         panel?.webview.postMessage({ type: "setupstatus", ...currentSetupStatus() })
         return
       }
+      if (m?.type === "runstatus") {
+        panel?.webview.postMessage({ type: "runstatus", ...currentRunStatus() })
+        return
+      }
       if (m?.cmd) vscode.commands.executeCommand(m.cmd, ...(m.args ?? []))
     })
   }
@@ -99,6 +103,9 @@ interface DashboardView {
   libraries: LibView[]
   hasHelp: boolean
   dataSource?: DataSource
+  // True while the WHOLE-pipeline auto-run task (`GHBIO: <name>`) is executing. Distinct from a
+  // per-step task (`GHBIO: <step title>`), so the ▶▶ 전체 분석 실행 button can show "running".
+  running?: boolean
 }
 
 function resolve(modules: Module[], target?: DashboardTarget): DashboardView {
@@ -166,6 +173,7 @@ function tutorialView(m: Module, p: Pipeline): DashboardView {
     libraries,
     hasHelp: !!p.help,
     dataSource: p.dataSource,
+    running: runningNames.has(`GHBIO: ${p.name}`),
   }
 }
 
@@ -283,6 +291,26 @@ function currentAlignStatus(): { done: boolean; hasLog: boolean; running: boolea
   return { done, hasLog: !!line, running, line }
 }
 
+// Whether the WHOLE-pipeline auto-run (▶▶ 전체 분석 실행) task is currently executing, plus a
+// coarse label of what it is doing right now. The full-run task is named `GHBIO: <pipeline name>`
+// (a per-step task is `GHBIO: <step title>`), and it lives server-side in the code-server backend,
+// so this stays accurate after the browser tab is closed and reopened — the whole point of this box.
+function currentRunStatus(): { running: boolean; label: string } {
+  if (!last) return { running: false, label: "" }
+  const view = resolve(loadModules(last.context), last.target)
+  const running = vscode.tasks.taskExecutions.some((e) => e.task.name === `GHBIO: ${view.name}`)
+  if (!running) return { running: false, label: "" }
+  // Best-effort "current phase", read from the same on-disk signals the step boxes poll.
+  const dl = currentDownloadStatus()
+  if (dl.phase === "download") {
+    const pct = dl.total > 0 ? Math.floor((dl.bytes / dl.total) * 100) : 0
+    return { running, label: `1단계 다운로드 중… ${pct}%` }
+  }
+  if (dl.phase === "convert") return { running, label: "1단계 BAM→FASTQ 변환 중…" }
+  if (currentAlignStatus().running) return { running, label: "2c STARsolo 정렬 중…" }
+  return { running, label: "분석 자동 실행 중…" }
+}
+
 // The Maynard reproduction needs a large, one-time legacy R installation. Its setup script
 // mirrors terminal output into setup.log; this compact status lets the dashboard make duplicate
 // clicks visibly unnecessary without exposing a full terminal transcript.
@@ -383,6 +411,12 @@ function html(v: DashboardView): string {
           <dt>작업 폴더 (Work folder)</dt><dd>${esc(v.dir)}</dd>
           ${ds.note ? `<dt>비고 (Note)</dt><dd>${esc(ds.note)}</dd>` : ""}
         </dl>
+        ${
+          ds.rationale
+            ? `<div class="ds-sub" style="margin-top:16px">선정 이유 (Why this paper)</div>
+               <div class="ds-why">${esc(ds.rationale)}</div>`
+            : ""
+        }
       </div>`
     : ""
 
@@ -522,6 +556,16 @@ function html(v: DashboardView): string {
   button.open-warn:hover { filter:brightness(1.06); }
   button.open-ok { background:#12312b; color:#7ee7d6; border:1px solid #1f5a4f; }
   @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(240,136,62,.5)} 70%{box-shadow:0 0 0 8px rgba(240,136,62,0)} 100%{box-shadow:0 0 0 0 rgba(240,136,62,0)} }
+  /* ▶▶ 전체 분석 실행 while the whole-pipeline task is running: keep it visibly "alive" (animated
+     gradient sweep + glow) even though it's disabled, so a returning user sees work is in progress. */
+  button.running { background:linear-gradient(110deg,#f59e0b,#f0883e,#f59e0b); background-size:200% 100%;
+    color:#2a1705; font-weight:800; opacity:1; cursor:default;
+    animation: runsweep 1.4s linear infinite, pulse 1.8s ease-out infinite; }
+  @keyframes runsweep { 0%{background-position:0% 0} 100%{background-position:200% 0} }
+  .runlabel { display:flex; align-items:center; gap:8px; margin:-14px 0 20px; font-size:12.5px; color:#f0b458; font-weight:600; }
+  .runlabel .spin { width:13px; height:13px; border-radius:50%; border:2px solid rgba(240,180,88,.35);
+    border-top-color:#f0b458; display:inline-block; flex:none; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg) } }
   .path { color:#6e7b8a; font-size:12px; margin-top:4px; word-break:break-all; }
   a { color:#2dd4bf; }
   /* Download status box (under Step 1) */
@@ -548,6 +592,7 @@ function html(v: DashboardView): string {
   .qtip b { color:#7ee7d6; }
   /* Project info card */
   .ds-sub { font-size:12px; font-weight:800; letter-spacing:.02em; color:#7ee7d6; text-transform:uppercase; margin:2px 0 8px; }
+  .ds-why { font-size:13px; line-height:1.65; color:#c9d4de; white-space:pre-line; }
   .ds { display:grid; grid-template-columns:auto 1fr; gap:5px 12px; font-size:13px; align-items:baseline; }
   .ds dt { color:#8b98a5; white-space:nowrap; }
   .ds dd { margin:0; color:#e6edf3; word-break:break-all; }
@@ -562,10 +607,22 @@ function html(v: DashboardView): string {
 
   <div class="btns">
     ${openBtn}
-    ${isTut ? `<button onclick="send('ghbio.runPipeline','${esc(v.pipelineId)}')">▶▶ 전체 분석 실행</button>` : ""}
+    ${
+      isTut
+        ? `<button id="runbtn" class="${v.running ? "running" : ""}"${v.running ? " disabled" : ""} onclick="send('ghbio.runPipeline','${esc(v.pipelineId)}')">${v.running ? "⏳ 전체 분석 실행 중…" : "▶▶ 전체 분석 실행"}</button>`
+        : ""
+    }
     ${isTut && v.hasHelp ? `<button class="ghost" onclick="send('ghbio.openHelp')">❓ 사용설명서</button>` : ""}
     <button class="ghost" onclick="send('ghbio.openHome')">← 대시보드 홈</button>
   </div>
+  ${
+    isTut
+      ? `<div id="runlabel" class="runlabel"${v.running ? "" : ' style="display:none"'}>
+           <span class="spin"></span>
+           <span id="runlabeltext">자동 실행 중… 창을 닫아도 서버에서 계속 진행됩니다. 아래 단계 로그에서 진행 상황을 확인하세요.</span>
+         </div>`
+      : ""
+  }
 
   <div class="row">
     <div>
@@ -763,6 +820,33 @@ function html(v: DashboardView): string {
       function start(){ if(!timer && !stopped){ poll(); timer = setInterval(poll, 5000) } }
       function stop(){ stopped=true; if(timer){ clearInterval(timer); timer=null } }
       start()
+    })()
+
+    // ---- Whole-pipeline auto-run indicator (the ▶▶ 전체 분석 실행 button) --------
+    // Server-side the full run is a persistent Task, so it keeps going after the browser closes.
+    // We poll every few seconds and reflect its live state on the button: while it runs the button
+    // animates + is disabled (a re-click would only harmlessly abort at the download lock), and a
+    // subtitle shows the current phase. This is how a returning user knows "it's running — just wait".
+    (function(){
+      const btn = document.getElementById('runbtn')
+      const label = document.getElementById('runlabel')
+      const labelText = document.getElementById('runlabeltext')
+      if (!btn) return
+      const IDLE = '▶▶ 전체 분석 실행'
+      const TAIL = ' · 창을 닫아도 서버에서 계속 진행됩니다.'
+      function onStatus(m){
+        if (m.running){
+          btn.classList.add('running'); btn.disabled = true; btn.textContent = '⏳ 전체 분석 실행 중…'
+          if (label) label.style.display = ''
+          if (labelText) labelText.textContent = (m.label || '분석 자동 실행 중…') + TAIL
+        } else {
+          btn.classList.remove('running'); btn.disabled = false; btn.textContent = IDLE
+          if (label) label.style.display = 'none'
+        }
+      }
+      window.addEventListener('message', ev => { if (ev.data && ev.data.type==='runstatus') onStatus(ev.data) })
+      function poll(){ vscode.postMessage({ type:'runstatus' }) }
+      poll(); setInterval(poll, 4000)
     })()
   </script>
 </body></html>`
