@@ -1,7 +1,7 @@
 {
   "id": "scrna-seq-melanoma-tirosh",
   "name": "전이성 흑색종 생태계 (Tirosh 2016, GSE72056)",
-  "summary": "Tirosh et al., Science 2016 — 4,645개 흑색종 단일세포로 논문 Figure 1~5 재현 (inferCNV·MITF/AXL·T세포 소진)",
+  "summary": "Tirosh et al., Science 2016 — 4,645개 흑색종 단일세포로 논문 Figure 1~5 재현 (inferCNV·MITF/AXL·T세포 소진). 저자 라벨을 뺀 독립 재도출로 악성세포·세포유형을 정량 검증 (헌장 제1·2조)",
   "dataSource": {
     "provider": "NCBI GEO (저자 공개 처리 행렬)",
     "dataset": "Tirosh et al. 2016, Science — Dissecting the multicellular ecosystem of metastatic melanoma by single-cell RNA-seq (19 patients, 4,645 cells)",
@@ -22,19 +22,22 @@
     { "id": "fig1", "title": "2. Figure 1 — inferCNV: malignant vs normal", "ko": "발현 행렬 → inferCNV로 암세포/정상세포 구분 → tSNE (Fig 1B·C·D)", "kind": "task", "run": "~/ghbio-venv/bin/python 02_figure1_infercnv.py", "produces": ["melanoma_processed.h5ad", "fig1B_infercnv_heatmap.png", "fig1C_tsne_malignant.png", "fig1D_tsne_nonmalignant.png", "markers_by_cluster.csv", "celltype_draft.csv", "run_summary.txt"] },
     { "id": "fig23", "title": "3. Figures 2–3 — malignant cell states", "ko": "세포주기(Fig 2)와 MITF/AXL 내성 프로그램(Fig 3)", "kind": "task", "run": "~/ghbio-venv/bin/python 03_figures2_3_malignant_states.py", "produces": ["fig2_cell_cycle.png", "fig3_mitf_axl.png", "mitf_axl_by_cell.csv"] },
     { "id": "fig45", "title": "4. Figures 4–5 — microenvironment & T cells", "ko": "CAF–T세포 상호작용(Fig 4)과 T세포 소진/세포독성(Fig 5)", "kind": "task", "run": "~/ghbio-venv/bin/python 04_figures4_5_microenvironment.py", "produces": ["fig4_caf_tcell.png", "fig5_tcell_exhaustion.png", "tcell_states.csv"] },
-    { "id": "ai", "title": "5. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 단발 패널)", "kind": "ai" },
-    { "id": "report", "title": "6. Generate PDF report", "ko": "Figure 1~5 + 해석을 하나의 PDF로", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_melanoma_tirosh_report.pdf"] }
+    { "id": "validate", "title": "5. 독립 검증 — 저자 라벨 미사용 재도출·대조", "ko": "저자 라벨을 빼고 marker로 세포유형·악성세포를 다시 도출한 뒤, 저자 라벨과 정량 대조 (정확도·F1·ARI·혼동행렬, 헌장 제1·2조)", "kind": "task", "run": "~/ghbio-venv/bin/python 06_validate_vs_authors.py", "produces": ["validation_summary.csv", "validation_verdict.txt", "celltype_annotation.csv", "confusion_celltype.csv", "confusion_celltype.png", "validation_bars.png"] },
+    { "id": "ai", "title": "6. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 단발 패널)", "kind": "ai" },
+    { "id": "report", "title": "7. Generate PDF report", "ko": "Figure 1~5 + 독립 검증 + 해석을 하나의 PDF로", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_melanoma_tirosh_report.pdf"] }
   ],
   "ai": {
     "system": "You are the BioIDE AI Co-Scientist for a reproduction of Tirosh et al. (Science 2016), a single-cell RNA-seq dissection of metastatic melanoma. The data are the authors' published log2(TPM/10+1) matrix (GSE72056) with their own malignant/non-malignant and cell-type labels. Interpret cluster markers in the melanoma context: malignant melanocytic tumor cells (MITF program: MITF/TYR/PMEL/MLANA/DCT), and the tumor microenvironment — T cells, B cells, macrophages, endothelial cells, cancer-associated fibroblasts (CAFs), and NK cells. Be aware of the paper's core findings: (1) inferred CNVs separate malignant from normal cells; (2) malignant cells span a continuum between an MITF-high (differentiated) and an AXL-high (dedifferentiated, drug-resistant) transcriptional state; (3) CAFs express complement/chemokine genes implicated in T-cell interactions; (4) tumor-infiltrating T cells vary along cytotoxic and exhaustion programs. Separate observation from hypothesis; never reduce melanoma cell types to a PBMC-only scheme. Reply in Korean unless asked otherwise.",
-    "readyFile": "markers_by_cluster.csv",
+    "readyFile": "validation_summary.csv",
     "context": [
+      { "file": "validation_summary.csv", "heading": "저자 라벨 대비 독립 검증 지표·판정 (validation_summary.csv)" },
+      { "file": "celltype_annotation.csv", "heading": "우리 독립 marker 기반 세포유형 주석 (celltype_annotation.csv)" },
       { "file": "celltype_draft.csv", "heading": "저자 라벨 기준 세포유형 구성 (celltype_draft.csv)" },
       { "file": "markers_by_cluster.csv", "heading": "세포유형/클러스터별 top marker (markers_by_cluster.csv, top10)", "topByRank": 10 },
       { "file": "mitf_axl_by_cell.csv", "heading": "암세포별 MITF vs AXL 프로그램 점수 요약 (mitf_axl_by_cell.csv)" },
       { "file": "tcell_states.csv", "heading": "T세포 세포독성/소진 프로그램 요약 (tcell_states.csv)" }
     ],
-    "readyHint": "결과 파일이 없습니다. 먼저 2단계(Figure 1)를 실행해 markers_by_cluster.csv / celltype_draft.csv 를 만들어 주세요.",
+    "readyHint": "검증 결과가 없습니다. 먼저 2~5단계(Figure 1~5, 독립 검증)를 실행해 validation_summary.csv 를 만들어 주세요.",
     "easyReport": {
       "label": "🎓 고등학생 버전 보고서",
       "makeReport": "05_make_report.sh",
@@ -58,7 +61,8 @@
       "fig1": "발현 값을 유전자의 <b>염색체 위치 순서</b>로 늘어놓고 100-유전자 창으로 이동평균을 내어 <b>inferCNV</b>를 직접 계산합니다(논문 방법 그대로). 이것으로 암세포와 정상세포를 구분하고(Fig 1B), 두 집단을 각각 tSNE로 그립니다(Fig 1C·D). 이후 단계가 쓸 <code>markers_by_cluster.csv</code>·<code>celltype_draft.csv</code>와 처리된 <code>melanoma_processed.h5ad</code>가 만들어집니다.",
       "fig23": "암세포만 골라 <b>세포주기</b>(G1/S vs G2/M) 상태를 추정하고(Fig 2), <b>MITF 프로그램</b>(분화)과 <b>AXL 프로그램</b>(미분화·내성) 점수를 매겨 둘의 음의 상관과 종양 내/간 이질성을 보여줍니다(Fig 3).",
       "fig45": "종양 미세환경을 봅니다. <b>CAF</b>가 보체·케모카인 유전자를 발현하는 양상(Fig 4)과, 침윤 <b>T세포</b>를 CD4/CD8로 나눠 <b>세포독성 vs 소진</b> 프로그램을 그립니다(Fig 5).",
-      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. 암세포/정상세포, MITF/AXL, CAF, T세포 소진 결과를 해석하고 가설을 받습니다. 프리셋 질문의 답변은 저장되어 리포트에 포함됩니다.",
+      "validate": "<b>독립 검증(헌장 제1·2조).</b> 앞 단계는 저자 라벨을 활용해 Figure를 재현했지만, 여기서는 저자의 malignant/세포유형 라벨을 <b>빼고</b> marker 기반으로 클러스터·세포유형·악성세포를 <b>처음부터 다시 도출</b>한 뒤, 그 독립 결과를 저자 라벨과 대조합니다. 악성세포 판정 정확도·F1·ARI, 비악성 세포유형 일치 정확도·ARI·혼동행렬을 계산해 재현/부분재현/불일치를 판정합니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. 암세포/정상세포, MITF/AXL, CAF, T세포 소진과 <b>독립 검증 지표</b>를 해석하고 가설을 받습니다. 프리셋 질문의 답변은 저장되어 리포트에 포함됩니다.",
       "report": "Figure 1~5와 해석을 하나의 <b>PDF 보고서</b>로 정리합니다."
     },
     "glossary": [

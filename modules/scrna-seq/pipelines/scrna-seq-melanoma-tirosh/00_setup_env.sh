@@ -5,7 +5,8 @@ set -euo pipefail
 # 00_setup_env.sh  (Tirosh 2016 melanoma reproduction)
 # Reuse the shared Scanpy virtual environment (~/ghbio-venv) used by the other
 # scRNA-seq tutorials. This example starts from a published expression matrix,
-# so it needs only the core Scanpy stack — no STAR / pysam / GPU packages.
+# so it needs only the core Scanpy stack — no STAR / pysam. PyTorch is added only
+# when a GPU is present, to accelerate the inferCNV step (optional; CPU fallback).
 # 이 예제는 공개 발현 행렬에서 시작하므로 다른 예제와 같은 Scanpy 환경만 있으면 됩니다.
 #
 # Idempotent: if the stack already imports, we skip pip entirely. FORCE=1 reinstalls.
@@ -37,6 +38,14 @@ else
   python -m pip install \
     scanpy anndata leidenalg python-igraph umap-learn \
     matplotlib pandas numpy scipy
+fi
+
+# Optional GPU acceleration: 02_figure1_infercnv.py runs the inferCNV moving-average
+# on PyTorch when a CUDA GPU is present, and falls back to NumPy otherwise. Only install
+# torch when a GPU is actually visible, so CPU-only boxes stay lightweight.
+if command -v nvidia-smi >/dev/null 2>&1 && ! python -c "import torch" 2>/dev/null; then
+  echo "==> GPU detected — installing PyTorch for GPU inferCNV (optional; non-fatal)..."
+  python -m pip install torch || echo "==> torch install failed; inferCNV will run on CPU."
 fi
 
 echo ""

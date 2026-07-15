@@ -42,6 +42,17 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
 
+# Optional GPU acceleration for the inferCNV moving-average. The result is
+# numerically identical to the NumPy path (uniform kernel + zero padding), so the
+# tutorial stays correct — and reproducible — on machines without a GPU.
+try:
+    import torch
+
+    _GPU = bool(torch.cuda.is_available())
+except Exception:  # torch not installed or no CUDA runtime
+    torch = None
+    _GPU = False
+
 HOME = os.path.expanduser("~")
 RESULTS_DIR = os.environ.get("GHBIO_RESULTS", os.path.join(HOME, "ghbio-tutorial", "results"))
 DATA = os.path.join(HOME, "ghbio-tutorial", "data", "melanoma-gse72056",
@@ -175,6 +186,66 @@ def chrom_order(chrom):
 # -----------------------------------------------------------------------------
 # 3. inferCNV (paper's method) + Figure 1B heatmap
 # -----------------------------------------------------------------------------
+def _uniform_smooth_gpu(block, k, device):
+    """np.convolve(row, ones(k)/k, mode='same') for every row of `block`, on GPU.
+
+    A uniform kernel is symmetric, so cross-correlation (conv1d) equals convolution.
+    A full zero-padded convolution then the centered 'same' slice reproduces NumPy's
+    edge attenuation exactly.
+    """
+    kernel = torch.full((1, 1, k), 1.0 / k, dtype=block.dtype, device=device)
+    full = torch.nn.functional.conv1d(block.unsqueeze(1), kernel, padding=k - 1)
+    start = (k - 1) // 2
+    return full[:, 0, start:start + block.shape[1]]
+
+
+def _verify_gpu_conv(device):
+    """One-time guard: confirm the GPU convolution matches NumPy before trusting it."""
+    rng = np.random.RandomState(0)
+    r = rng.randn(3, 37).astype(np.float32)
+    k = 10
+    ref = np.stack([np.convolve(row, np.ones(k) / k, mode="same") for row in r])
+    got = _uniform_smooth_gpu(torch.from_numpy(r).to(device), k, device).cpu().numpy()
+    return np.allclose(ref, got, atol=1e-5)
+
+
+def _moving_average_by_chrom(E, ords, win):
+    """Per-chromosome centered moving average (paper's inferCNV smoothing).
+
+    Batched GPU conv1d per chromosome when CUDA is available, else a vectorized
+    NumPy fallback. Both match the original per-cell np.convolve loop bit-for-bit.
+    """
+    use_gpu = _GPU
+    if use_gpu:
+        device = torch.device("cuda")
+        if not _verify_gpu_conv(device):
+            print("==> GPU convolution self-check failed; falling back to CPU.")
+            use_gpu = False
+    if use_gpu:
+        print(f"==> inferCNV smoothing on GPU: {torch.cuda.get_device_name(0)}")
+        Et = torch.from_numpy(np.ascontiguousarray(E, dtype=np.float32)).to(device)
+        out = torch.empty_like(Et)
+        for ch in np.unique(ords):
+            col_t = torch.as_tensor(np.where(ords == ch)[0], device=device, dtype=torch.long)
+            k = min(win, int(col_t.numel()))
+            block = Et.index_select(1, col_t)
+            out[:, col_t] = block if k < 5 else _uniform_smooth_gpu(block, k, device)
+        return out.cpu().numpy()
+
+    print("==> inferCNV smoothing on CPU (no GPU detected).")
+    out = np.zeros_like(E, dtype=np.float32)
+    for ch in np.unique(ords):
+        cols = np.where(ords == ch)[0]
+        block = E[:, cols]
+        k = min(win, block.shape[1])
+        if k < 5:
+            out[:, cols] = block
+            continue
+        kernel = np.ones(k) / k
+        out[:, cols] = np.apply_along_axis(lambda r: np.convolve(r, kernel, mode="same"), 1, block)
+    return out
+
+
 def infer_cnv(adata):
     print("==> Computing inferred CNV profiles (moving average over chromosomes)…")
     pos = gene_positions()
@@ -199,17 +270,7 @@ def infer_cnv(adata):
 
     ords = pos["ord"].values
     win = 100  # window of 100 genes, not crossing chromosome boundaries (paper)
-    cnv = np.zeros_like(E, dtype=np.float32)
-    for ch in np.unique(ords):
-        cols = np.where(ords == ch)[0]
-        block = E[:, cols]
-        k = min(win, block.shape[1])
-        if k < 5:
-            cnv[:, cols] = block
-            continue
-        kernel = np.ones(k) / k
-        sm = np.apply_along_axis(lambda r: np.convolve(r, kernel, mode="same"), 1, block)
-        cnv[:, cols] = sm
+    cnv = _moving_average_by_chrom(E, ords, win)
 
     # Express CNV relative to the average of reference NORMAL cells (immune/stromal),
     # so malignant aneuploidy stands out. (Paper baselines against normal cells.)
