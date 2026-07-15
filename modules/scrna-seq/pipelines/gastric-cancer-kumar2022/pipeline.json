@@ -1,0 +1,73 @@
+{
+  "id": "gastric-cancer-kumar2022",
+  "name": "위암 독립 재현 (Kumar 2022, gastric · GPU)",
+  "summary": "Kumar et al., Cancer Discovery 2022 — 저자 라벨을 소비하지 않고(GEO에 라벨 자체가 없음), 새로 짠 GPU·Python 코드로 세포유형·악성 위 상피세포를 독립 재도출하고 저자 주장을 정량 검증 (BioIDE 헌장)",
+  "dataSource": {
+    "provider": "GEO (저자 공개 시료별 원시 카운트 CSV 행렬 — 세포유형 라벨은 미배포)",
+    "dataset": "Kumar et al. 2022, Cancer Discovery — Single-Cell Atlas of Lineage States, Tumor Microenvironment, and Subtype-Specific Expression Programs in Gastric Cancer (>200,000 cells · 31명 환자 · 48개 시료: 다양한 병기·조직형)",
+    "datasetUrl": "https://aacrjournals.org/cancerdiscovery/article/12/3/670/681898",
+    "fastqUrl": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE183nnn/GSE183904/suppl/GSE183904_RAW.tar",
+    "size": "~329 MB (GSE183904_RAW.tar) · 시료별 CSV 카운트 행렬(genes × cells)의 TAR",
+    "note": "BioIDE 헌장 제1조에 따라 저자의 세포유형 라벨을 분석 입력으로 쓰지 않습니다. 이 데이터셋은 원시 시퀀싱이 환자 프라이버시로 비공개이고 GEO에 세포유형/클러스터 라벨이 배포되지 않아(시료별 원시 카운트 CSV만 존재) 처음부터 우리 코드로 재도출해야 합니다: 시료별 CSV 병합(공통 유전자) → QC → 정규화 → HVG → GPU(PyTorch) 스케일·PCA → Harmony(시료 배치) → Leiden → UMAP → marker 기반 세포유형 주석 → 비지도 GMM 악성/정상 상피세포 분리. 저자는 자체 파이프라인으로 악성세포를 판정했지만, 우리는 의도적으로 다른 비지도 방법을 써서 두 독립 경로의 수렴 여부를 봅니다(제6조). 라벨이 없으므로 3단계 '독립 검증'은 논문이 보고한 주장(세포계통 재현·악성 위 분화점수 하락·악성 증식 상승·종양 편중)과 대조합니다(제2조).",
+    "download": {
+      "tar": "~/ghbio-tutorial/data/gastric-kumar2022/GSE183904_RAW.tar",
+      "totalBytes": 345210880,
+      "extracted": "~/ghbio-tutorial/data/gastric-kumar2022/unpacked"
+    }
+  },
+  "deepModule": true,
+  "steps": [
+    { "id": "setup", "title": "0. Setup GPU env (Scanpy·PyTorch·Harmony)", "ko": "GPU 분석 환경 설치 — 다른 예제와 공유", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
+    { "id": "download", "title": "1. Download gastric matrices (Kumar 2022, GEO GSE183904)", "ko": "저자 공개 시료별 원시 카운트 CSV(tar, ~329 MB) 내려받고 시료별로 풀기", "kind": "task", "run": "bash 01_download_gastric.sh", "presentPath": "~/ghbio-tutorial/data/gastric-kumar2022/unpacked" },
+    { "id": "gpu", "title": "2. GPU 독립 재분석 (저자 라벨 미사용)", "ko": "시료별 CSV 병합→QC→정규화→HVG→GPU 스케일·PCA→Harmony→Leiden→UMAP→marker 세포유형 주석→비지도 악성 상피세포 분리 (전부 우리 코드로 재도출)", "kind": "task", "run": "bash run_gpu_reanalysis.sh", "produces": ["gpu_reanalysis.h5ad", "celltype_annotation.csv", "markers_by_cluster.csv", "celltype_composition.csv", "malignant_epithelial.csv", "epithelial_summary.csv", "umap_celltypes.png", "umap_clusters.png", "umap_malignant.png", "qc_summary.csv", "run_summary.txt", "provenance.json"] },
+    { "id": "validate", "title": "3. 독립 검증 — 저자 주장과 대조", "ko": "우리 독립 결과 vs 논문 주장: 세포계통·marker 재현·악성 분화점수(GDS) 하락·악성 증식 상승·조직별 악성 편중·판정 (헌장 제2조)", "kind": "task", "run": "~/ghbio-venv/bin/python 03_validate_vs_authors.py", "produces": ["validation_summary.csv", "validation_verdict.txt", "marker_recovery.csv", "marker_recovery.png", "validation_bars.png"] },
+    { "id": "ai", "title": "4. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 단발 패널)", "kind": "ai" },
+    { "id": "report", "title": "5. Generate PDF report", "ko": "독립 재분석 그림 + 검증 결과 + 해석을 하나의 PDF로", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_gastric_kumar2022_report.pdf"] }
+  ],
+  "ai": {
+    "system": "You are the BioIDE AI Co-Scientist for an INDEPENDENT GPU reproduction of Kumar et al. (Cancer Discovery 2022), a single-cell RNA-seq atlas of gastric cancer — >200,000 cells from 31 patients across 48 samples spanning clinical stages and histologic subtypes. Per the BioIDE constitution, this pipeline did NOT consume any author cell-type labels (none are distributed on GEO for GSE183904 — only per-sample raw count CSVs; raw sequencing was withheld for patient privacy): starting from the raw count matrices, our own freshly-written GPU code (per-sample merge on common genes, QC, normalisation, HVG, PyTorch scaling + PCA, Harmony sample integration, Leiden clustering, marker-based cell-type annotation, and an unsupervised GMM malignant/normal epithelial split) re-derived the cell types and the malignant epithelial population from scratch. A separate validation step then compared our independent results against the PAPER'S PUBLISHED CLAIMS: recovery of the major lineages (epithelial, T/NK, B, plasma, myeloid, endothelial, fibroblast) and their canonical markers; that malignant epithelial cells have a LOWER gastric-differentiation score (GDS: TFF1/TFF2/MUC5AC/MUC6/GKN1/GKN2/LIPF/PGC/ATP4A/ATP4B) than normal epithelial cells (loss of normal gastric-mucosa identity); that malignant epithelial cells are more proliferative (MKI67/TOP2A/UBE2C program); and that malignant epithelial cells are enriched in tumour vs normal tissue when a tissue label is derivable. Interpret results in the gastric-cancer context — epithelial (EPCAM/KRT8/KRT18/KRT19/CDH1), malignant gastric carcinoma signature (CEACAM5/CEACAM6/KRT17/CLDN3/CLDN4/CLDN7/S100P/OLFM4/MMP7), T/NK (CD3D/CD3E/NKG7), B/plasma (CD79A/MS4A1/MZB1), myeloid (LYZ/CD68/C1QA), endothelial (PECAM1/VWF), CAF/fibroblast (COL1A1/ACTA2) — and judge whether our INDEPENDENT reanalysis REPRODUCES the authors' claims (agree / partial / disagree) citing the validation metrics. Distinguish observation from hypothesis; be explicit that agreement means two independent analyses converge, not that either is ground truth. Reply in Korean unless asked otherwise.",
+    "readyFile": "validation_summary.csv",
+    "context": [
+      { "file": "celltype_composition.csv", "heading": "우리 독립 세포유형 구성 (celltype_composition.csv)" },
+      { "file": "markers_by_cluster.csv", "heading": "우리 Leiden 클러스터별 top marker (markers_by_cluster.csv, top10)", "topByRank": 10 },
+      { "file": "malignant_epithelial.csv", "heading": "우리 악성 vs 정상 상피세포 DE marker (malignant_epithelial.csv)" },
+      { "file": "epithelial_summary.csv", "heading": "우리 상피세포 분리 요약·악성/분화(GDS)/증식 점수 (epithelial_summary.csv)" },
+      { "file": "validation_summary.csv", "heading": "저자 주장 대비 독립 검증 지표·판정 (validation_summary.csv)" }
+    ],
+    "readyHint": "검증 결과가 없습니다. 먼저 2단계(GPU 재분석)와 3단계(독립 검증)를 실행해 validation_summary.csv 를 만들어 주세요.",
+    "easyReport": {
+      "label": "🎓 고등학생 버전 보고서",
+      "makeReport": "05_make_easy_report.sh",
+      "title": "# 🔬 위암 세포 생태계 이야기 — 고등학생 쉬운 리포트",
+      "datasetLabel": "이 튜토리얼(위암 gastric cancer, Kumar 2022를 GPU로 독립 재현·검증)",
+      "paperClaim": "원 논문(Kumar et al., Cancer Discovery 2022)의 핵심 주장: 위암에는 정상 위 상피세포와 구별되는 악성 상피세포가 있고, 악성일수록 정상 위점막의 정체성 유전자(TFF1·MUC5AC·GKN1·펩시노겐 등)를 잃는다. 악성 상피세포는 더 빠르게 증식하며(세포주기 유전자 상승), 종양 미세환경에는 T·B·형질·골수성·내피세포와 암관련 섬유아세포(CAF)가 다양하게 존재한다. 저자는 병기·조직형(미만형/장형)에 따라 서로 다른 발현 프로그램을 보고했다. BioIDE는 저자의 세포 라벨을 그대로 쓰지 않고(라벨이 공개돼 있지도 않다), 새로 짠 GPU·Python 코드로 세포유형과 악성 상피세포를 처음부터 다시 찾아낸 뒤, 그 결과가 저자 결론과 일치하는지 정량적으로 검증했다."
+    },
+    "prompts": [
+      { "key": "reproduce", "label": "재현 성공했나?", "q": "validation_summary.csv의 지표(세포계통 재현 coverage, marker 자기일치도, 악성 GDS 하락폭, 악성 증식 상승폭, 조직별 악성 편중)를 근거로, 우리 독립 GPU 재분석이 원 논문(Kumar 2022)의 핵심 주장을 재현했는지 '재현/부분재현/불일치'로 판정해줘. 각 지표를 인용하고, 어떤 주장이 잘 맞고 어디서 어긋나는지 설명해줘." },
+      { "key": "celltypes", "label": "독립 세포유형 해석", "q": "우리 marker 기반 세포유형 주석(celltype_composition.csv, markers_by_cluster.csv)을 근거로 각 세포유형의 정체성과 marker 근거를 표로 제시하고, 논문이 보고한 계통과 대조했을 때 애매하거나 병합/분할이 필요한 부분을 지적해줘." },
+      { "key": "malignant", "label": "악성 상피세포 독립 판정", "q": "우리는 저자 라벨 없이 비지도 GMM으로 악성/정상 상피세포를 나눴다. malignant_epithelial.csv의 DE marker와 epithelial_summary(악성/분화(GDS)/증식 점수)를 근거로, 이 독립 판정이 논문의 악성 상피세포 특징(정상 위점막 분화 유전자 상실, 위암 서명·증식 상승)을 얼마나 재현하는지 해석해줘." },
+      { "key": "hypothesis", "label": "가설·기여", "q": "독립 재분석과 검증 결과를 종합해, (1) 검증 가능한 가설 3~5개와 (2) 이 GPU 독립 재현이 커뮤니티에 주는 기여(원 논문 결론의 재현성 확인, 라벨 없는 데이터에서의 재도출, 더 빠른 GPU 코드 제공)를 서술해줘. 관찰과 가설을 분리하고 임상적 과장을 피해줘." },
+      { "key": "easy_report", "label": "🎓 고등학생 버전 보고서", "q": "이 분석(저자 라벨 없이 새로 짠 GPU 코드로 세포유형·악성 위 상피세포를 다시 찾고, 논문 주장과 일치하는지 검증)을 바탕으로 **고등학생도 이해할 '쉬운 리포트'**를 작성해줘. 규칙: (1) 전문용어는 쉬운 말로 풀기. (2) **일상 비유를 아주 많이** — 예: 종양=여러 주민이 사는 도시, 정상 위 상피세포=제 역할(위점막·소화액 재료 만들기) 잘하는 성실한 일꾼, 악성 상피세포=본업을 잊고 제멋대로 빨리 늘어나는 세포, 면역세포(T·B·골수성)=경찰·청소부, 섬유아세포(CAF)=제멋대로 짓는 건설업자, 내피세포=도시의 도로·혈관, UMAP=비슷한 세포끼리 모은 지도, '독립 재현'=답지를 안 보고 스스로 풀어 정답과 맞춰보기, 검증=채점, GDS(분화점수)=본업 실력 점수, 증식=인구가 빨리 느는 것. 비유 6개 이상. (3) 순서: ① 무엇을 왜 했는지(답 안 보고 다시 분석) ② 어떤 세포들이 사는지 ③ 정상 vs 악성 상피세포를 스스로 어떻게 구분했는지(본업 실력이 떨어지고 더 빨리 늘어나는 것으로) ④ 악성세포가 왜 위험한지 ⑤ 논문 주장과 얼마나 맞았는지(채점) ⑥ 왜 흥미롭고 앞으로 무엇을. (4) 친근한 말투, 순수 한국어. (5) 끝에 '💡 한 줄 요약'. 제목은 '# 🔬 위암 세포 생태계 이야기 — 고등학생 쉬운 리포트'." }
+    ]
+  },
+  "help": {
+    "intro": "이 예제는 <b>Kumar et al., Cancer Discovery 2022</b>(위암 단일세포 아틀라스)를 <b>BioIDE 헌장</b>에 따라 <b>독립 재현</b>합니다. 핵심 원칙(제1조): 저자가 붙인 세포유형 라벨을 <b>분석 입력으로 쓰지 않습니다</b> — 이 데이터는 원시 시퀀싱이 비공개이고 GEO에 라벨이 배포되지 않아 <b>시료별 원시 카운트 CSV</b>만 있습니다. 시료별 행렬을 공통 유전자로 병합해 <b>우리가 새로 짠 GPU 코드</b>(QC → 정규화 → HVG → PyTorch 스케일·PCA → Harmony 시료 배치통합 → Leiden 클러스터링 → UMAP → marker 기반 세포유형 주석 → 비지도 GMM 악성/정상 상피세포 분리)로 세포유형과 악성 상피세포를 <b>처음부터 다시 도출</b>합니다. 그런 다음 <b>독립 검증</b> 단계에서 우리 결과를 논문이 보고한 주장과 대조해 <b>원 논문 결론을 재현했는지</b> 정량 판정합니다(제2조).",
+    "steps": {
+      "setup": "GPU 분석 도구(Scanpy·PyTorch·Harmony·scikit-learn)를 설치합니다. 다른 예제와 <b>같은 환경</b>을 재사용하므로 이미 설치했다면 즉시 끝납니다.",
+      "download": "저자가 GEO(GSE183904)에 공개한 <b>시료별 원시 카운트 CSV tar(~329 MB)</b>을 내려받아 48개 시료로 풉니다. 세포유형 라벨은 배포되지 않으므로, 우리는 카운트만 입력으로 씁니다.",
+      "gpu": "<b>GPU 독립 재분석.</b> 시료별 CSV 병합(공통 유전자) → QC → 정규화 → HVG → <b>PyTorch로 GPU 스케일·PCA(SVD)</b> → <b>Harmony</b>로 시료 배치 통합 → <b>Leiden</b> 클러스터링 → UMAP → <b>marker 기반</b> 세포유형 주석 → <b>비지도 GMM</b>으로 악성/정상 상피세포 분리.",
+      "validate": "<b>독립 검증(제2조).</b> 라벨이 없으므로 논문이 보고한 <b>주장</b>과 대조합니다: 주요 세포계통과 marker 재현, 악성 상피세포의 <b>위 분화점수(GDS) 하락</b>, <b>증식 상승</b>, 조직별 <b>악성 편중</b>. 각 주장을 재현/부분재현/불일치로 판정합니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. 독립 재분석 결과와 검증 지표를 해석하고, 원 논문 재현 여부를 판정하며 가설을 받습니다.",
+      "report": "독립 재분석 그림·검증 결과·해석을 하나의 <b>PDF 보고서</b>로 정리합니다."
+    },
+    "glossary": [
+      { "term": "독립 재현 (헌장 제1조)", "def": "저자의 결과 라벨을 그대로 받아쓰지 않고, 원자료에서 <b>우리 코드로 분석을 처음부터 다시 수행</b>해 같은 결론에 도달하는지 보는 것. 이 데이터는 라벨이 공개돼 있지도 않아 재도출이 필수입니다." },
+      { "term": "위암 / gastric cancer", "def": "위 점막의 <b>상피세포</b>에서 생기는 암. 정상 위 상피세포는 점액(MUC5AC·TFF1)·소화효소(펩시노겐 PGA/PGC)·위산 관련(ATP4A/ATP4B) 유전자를 강하게 켭니다." },
+      { "term": "위 분화점수 (GDS)", "def": "세포가 정상 위 상피세포다운 <b>분화 유전자</b>(TFF1·MUC5AC·GKN1·LIPF·PGC 등)를 얼마나 켜고 있는지를 점수화한 것. 악성일수록 낮아집니다 — '본업 실력' 점수와 같습니다." },
+      { "term": "GPU 스케일·PCA (PyTorch)", "def": "유전자 발현을 z-score로 표준화하고 SVD로 주성분(PCA)을 구하는 무거운 밀집 행렬 연산을 <b>GPU에서 PyTorch로</b> 가속합니다. 원 논문의 느린 R/CPU 대비 빠릅니다." },
+      { "term": "Harmony 배치 통합", "def": "시료마다 생기는 기술적 차이(batch effect)를 보정해 여러 시료의 같은 세포유형이 섞이도록 임베딩을 정렬합니다. 31명 환자·48개 시료를 함께 분석하려면 필요합니다." },
+      { "term": "비지도 GMM 악성 분리", "def": "정답 라벨 없이, 상피세포의 <b>위암 악성 서명 − 분화 점수</b> 분포를 가우시안 혼합모델(GMM)로 두 무리(악성/정상)로 나눕니다. 저자 판정을 참고하지 않고 데이터만으로 가릅니다." },
+      { "term": "증식 프로그램", "def": "세포가 활발히 분열할 때 켜지는 세포주기 유전자(MKI67·TOP2A·UBE2C 등)의 발현 정도. 논문은 악성 상피세포가 정상보다 더 증식적이라고 보고했고, 우리는 그 방향을 재현하는지 확인합니다." }
+    ]
+  }
+}

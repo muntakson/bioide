@@ -1,0 +1,74 @@
+{
+  "id": "liver-cancer-ma2019",
+  "name": "간암 독립 재현 (Ma 2019, liver · GPU)",
+  "summary": "Ma et al., Cancer Cell 2019 — 저자 라벨을 소비하지 않고, 새로 짠 GPU·Python 코드로 세포유형·악성 종양세포를 독립 재도출하고 저자 주장을 정량 검증 (BioIDE 헌장)",
+  "dataSource": {
+    "provider": "GEO (저자 공개 10x 카운트 행렬 · 세포유형 라벨은 검증용으로만 사용)",
+    "dataset": "Ma et al. 2019, Cancer Cell — Tumor Cell Biodiversity Drives Microenvironmental Reprogramming in Liver Cancer (~9,900 cells · 19명 간암 환자: HCC + iCCA · 10x Genomics 2개 배치 Set1/Set2)",
+    "datasetUrl": "https://www.cell.com/cancer-cell/fulltext/S1535-6108(19)30364-1",
+    "fastqUrl": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE125nnn/GSE125449/suppl/",
+    "size": "~46 MB (Set1+Set2 10x 삼중 파일: matrix.mtx/genes.tsv/barcodes.tsv + 세포별 주석 samples.txt)",
+    "note": "BioIDE 헌장 제1조에 따라 저자의 세포유형 라벨(Type: Malignant cell / HPC-like / T cell / TAM / CAF / TEC / B cell)을 분석 입력으로 쓰지 않습니다. 저자가 GEO(GSE125449)에 공개한 10x 원시 UMI 카운트 행렬(Set1+Set2)만 입력으로 받아, 두 배치 병합(공통 유전자)→QC→정규화→HVG→GPU(PyTorch) 스케일·PCA→Harmony(시료 배치)→Leiden→UMAP→marker 기반 세포유형 주석→비지도 GMM 악성/HPC-like 상피세포 분리를 우리 코드로 다시 수행합니다. samples.txt의 저자 라벨은 3단계 '독립 검증'에서만 대조용으로 사용합니다(제2조). 저자와는 다른 비지도 GMM으로 악성세포를 가르므로, 일치는 두 독립 경로의 수렴을 뜻합니다(제6조).",
+    "download": {
+      "tar": "~/ghbio-tutorial/data/liver-ma2019/Set1/matrix.mtx.gz",
+      "totalBytes": 26707779,
+      "extracted": "~/ghbio-tutorial/data/liver-ma2019/Set2/matrix.mtx.gz"
+    }
+  },
+  "deepModule": true,
+  "steps": [
+    { "id": "setup", "title": "0. Setup GPU env (Scanpy·PyTorch·Harmony)", "ko": "GPU 분석 환경 설치 — 다른 예제와 공유", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
+    { "id": "download", "title": "1. Download liver matrices (Ma 2019, GEO GSE125449)", "ko": "저자 공개 10x 카운트 행렬(Set1+Set2, ~46 MB)과 세포별 주석 내려받기", "kind": "task", "run": "bash 01_download_liver.sh", "presentPath": "~/ghbio-tutorial/data/liver-ma2019/Set2/matrix.mtx.gz" },
+    { "id": "gpu", "title": "2. GPU 독립 재분석 (저자 라벨 미사용)", "ko": "Set1+Set2 병합(공통 유전자)→QC→정규화→HVG→GPU 스케일·PCA→Harmony→Leiden→UMAP→marker 세포유형 주석→비지도 GMM 악성/HPC-like 상피세포 분리 (전부 우리 코드로 재도출)", "kind": "task", "run": "bash run_gpu_reanalysis.sh", "produces": ["gpu_reanalysis.h5ad", "celltype_annotation.csv", "markers_by_cluster.csv", "celltype_composition.csv", "malignant_epithelial.csv", "epithelial_summary.csv", "umap_celltypes.png", "umap_clusters.png", "umap_malignant.png", "author_labels.csv", "qc_summary.csv", "run_summary.txt", "provenance.json"] },
+    { "id": "validate", "title": "3. 독립 검증 — 저자 라벨과 대조", "ko": "우리 독립 결과 vs 저자 라벨: ARI/NMI·혼동행렬·악성 상피세포 일치도(정확도/F1)·판정 (헌장 제2조)", "kind": "task", "run": "~/ghbio-venv/bin/python 03_validate_vs_authors.py", "produces": ["validation_summary.csv", "validation_verdict.txt", "confusion_celltype.csv", "confusion_celltype.png", "confusion_malignant.csv", "validation_bars.png"] },
+    { "id": "ai", "title": "4. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 단발 패널)", "kind": "ai" },
+    { "id": "report", "title": "5. Generate PDF report", "ko": "독립 재분석 그림 + 검증 결과 + 해석을 하나의 PDF로", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_liver_ma2019_report.pdf"] }
+  ],
+  "ai": {
+    "system": "You are the BioIDE AI Co-Scientist for an INDEPENDENT GPU reproduction of Ma et al. (Cancer Cell 2019), a single-cell RNA-seq study of human liver cancer (~9,900 cells from 19 patients spanning hepatocellular carcinoma (HCC) and intrahepatic cholangiocarcinoma (iCCA), profiled with 10x Genomics in two batches Set1/Set2). Per the BioIDE constitution, this pipeline did NOT consume the authors' cell-type labels (Type: Malignant cell / HPC-like / T cell / TAM / CAF / TEC / B cell): starting only from the authors' published raw 10x UMI count matrices, our own freshly-written GPU code (two-batch merge on common genes, QC, normalisation, HVG, PyTorch scaling + PCA, Harmony sample integration, Leiden clustering, marker-based cell-type annotation, and an unsupervised GMM malignant/HPC-like epithelial split) re-derived the cell types and the malignant tumour-cell population from scratch. A separate validation step then compared our independent results against the authors' Type labels (ARI/NMI, confusion matrix, malignant-epithelial accuracy/F1). Interpret the results in the liver-cancer context — malignant tumour cells (HCC hepatocyte-like: ALB/APOA1/APOB/TF/FGA/FGB/SERPINA1; iCCA cholangiocyte-like: EPCAM/KRT19/KRT7/SPP1; tumour markers GPC3/AFP/SPINK1/S100P), HPC-like hepatic-progenitor cells (PROM1/SOX9/EPCAM/KRT19), T cells (CD3D/CD8A), B cells (CD79A/MS4A1), tumour-associated macrophages TAM (CD68/CD163/C1QA/MARCO), cancer-associated fibroblasts CAF (COL1A1/ACTA2/PDGFRB), and tumour endothelial cells TEC (PECAM1/VWF/CLEC4G) — and, crucially, judge whether our INDEPENDENT reanalysis REPRODUCES the authors' claims (agree / partial / disagree) citing the validation metrics. Note that the malignant-cell vs HPC-like boundary is intrinsically fuzzy (both are epithelial). A key paper claim is that malignant-cell transcriptomic diversity correlates with tumour-microenvironment reprogramming. Distinguish observation from hypothesis; be explicit that agreement means two independent analyses converge, not that either is ground truth. Reply in Korean unless asked otherwise.",
+    "readyFile": "validation_summary.csv",
+    "context": [
+      { "file": "celltype_composition.csv", "heading": "우리 독립 세포유형 구성 (celltype_composition.csv)" },
+      { "file": "markers_by_cluster.csv", "heading": "우리 Leiden 클러스터별 top marker (markers_by_cluster.csv, top10)", "topByRank": 10 },
+      { "file": "malignant_epithelial.csv", "heading": "우리 악성 vs HPC-like 상피세포 DE marker (malignant_epithelial.csv)" },
+      { "file": "epithelial_summary.csv", "heading": "우리 상피세포 분리 요약·악성/HPC/증식 점수 (epithelial_summary.csv)" },
+      { "file": "validation_summary.csv", "heading": "저자 라벨 대비 독립 검증 지표·판정 (validation_summary.csv)" }
+    ],
+    "readyHint": "검증 결과가 없습니다. 먼저 2단계(GPU 재분석)와 3단계(독립 검증)를 실행해 validation_summary.csv 를 만들어 주세요.",
+    "easyReport": {
+      "label": "🎓 고등학생 버전 보고서",
+      "makeReport": "05_make_easy_report.sh",
+      "title": "# 🔬 간암 세포 생태계 이야기 — 고등학생 쉬운 리포트",
+      "datasetLabel": "이 튜토리얼(간암 liver cancer, Ma 2019를 GPU로 독립 재현·검증)",
+      "paperClaim": "원 논문(Ma et al., Cancer Cell 2019)의 핵심 주장: 간암(HCC·iCCA)에는 환자마다 다양한 악성 종양세포가 있고, 종양세포의 전사체 '다양성(biodiversity)'이 클수록 종양 미세환경이 더 크게 재편(면역억제·TAM 증가)되어 예후가 나빠진다. 종양에는 악성세포 외에도 T·B세포, 종양연관 대식세포(TAM), 암연관 섬유아세포(CAF), 종양 내피세포(TEC), 그리고 간 전구세포 유사(HPC-like) 세포가 함께 존재한다. BioIDE는 저자의 세포 라벨을 그대로 쓰지 않고, 새로 짠 GPU·Python 코드로 세포유형과 악성 종양세포를 처음부터 다시 찾아낸 뒤, 그 결과가 저자 결론과 일치하는지 정량적으로 검증했다."
+    },
+    "prompts": [
+      { "key": "reproduce", "label": "재현 성공했나?", "q": "validation_summary.csv의 ARI/NMI, 세포유형 라벨 일치 정확도, 악성/HPC-like 상피세포 판정 정확도/F1를 근거로, 우리 독립 GPU 재분석이 원 논문(Ma 2019)의 세포유형 구성과 악성 종양세포 결론을 재현했는지 '재현/부분재현/불일치'로 판정해줘. 각 지표를 인용하고, 어떤 세포유형·경계에서 잘 맞고 어디서 어긋나는지 설명해줘." },
+      { "key": "celltypes", "label": "독립 세포유형 해석", "q": "우리 marker 기반 세포유형 주석(celltype_composition.csv, markers_by_cluster.csv)을 근거로 각 세포유형(악성/상피·T·B·TAM·CAF·TEC)의 정체성과 marker 근거를 표로 제시하고, 저자 라벨과 대조했을 때 애매하거나 병합/분할이 필요한 부분을 지적해줘." },
+      { "key": "malignant", "label": "악성 종양세포 독립 판정", "q": "우리는 저자 라벨 없이 비지도 GMM으로 악성/HPC-like 상피세포를 나눴다. malignant_epithelial.csv의 DE marker와 epithelial_summary, 그리고 검증의 악성 정확도/F1를 근거로, 이 독립 판정이 저자의 Malignant cell vs HPC-like 구분을 얼마나 재현하는지 GPC3/AFP/SPINK1/S100P·PROM1/SOX9 등 근거와 함께 해석해줘. 두 집단 모두 상피성이라 경계가 애매한 점도 논의해줘." },
+      { "key": "hypothesis", "label": "가설·기여", "q": "독립 재분석과 검증 결과를 종합해, (1) 검증 가능한 가설 3~5개(특히 '악성세포 다양성 ↔ 미세환경 재편' 주장과 연결)와 (2) 이 GPU 독립 재현이 커뮤니티에 주는 기여(원 논문 결론의 재현성 확인, 더 빠른 GPU 코드 제공)를 서술해줘. 관찰과 가설을 분리하고 임상적 과장을 피해줘." },
+      { "key": "easy_report", "label": "🎓 고등학생 버전 보고서", "q": "이 분석(저자 라벨 없이 새로 짠 GPU 코드로 세포유형·악성 종양세포를 다시 찾고, 저자 결론과 일치하는지 검증)을 바탕으로 **고등학생도 이해할 '쉬운 리포트'**를 작성해줘. 규칙: (1) 전문용어는 쉬운 말로 풀기. (2) **일상 비유를 아주 많이** — 예: 종양=여러 주민이 사는 도시, 정상/전구(HPC-like) 세포=제 역할을 아직 지키는 견습 일꾼, 악성 종양세포=본업을 잊고 제멋대로 빨리 늘어나는 세포, 면역세포(T·B·TAM)=경찰·청소부, 섬유아세포(CAF)=제멋대로 짓는 건설업자, 내피세포(TEC)=도시의 도로·혈관, UMAP=비슷한 세포끼리 모은 지도, '독립 재현'=답지를 안 보고 스스로 풀어 정답과 맞춰보기, 검증=채점, 악성세포 다양성=주민 성격이 제각각인 정도. 비유 6개 이상. (3) 순서: ① 무엇을 왜 했는지(답 안 보고 다시 분석) ② 어떤 세포들이 사는지 ③ 악성세포와 HPC-like를 스스로 어떻게 구분했는지 ④ 악성세포가 왜 위험한지·다양성이 왜 중요한지 ⑤ 저자 결론과 얼마나 맞았는지(채점) ⑥ 왜 흥미롭고 앞으로 무엇을. (4) 친근한 말투, 순수 한국어. (5) 끝에 '💡 한 줄 요약'. 제목은 '# 🔬 간암 세포 생태계 이야기 — 고등학생 쉬운 리포트'." }
+    ]
+  },
+  "help": {
+    "intro": "이 예제는 <b>Ma et al., Cancer Cell 2019</b>(간암 liver cancer 단일세포 아틀라스)를 <b>BioIDE 헌장</b>에 따라 <b>독립 재현</b>합니다. 핵심 원칙(제1조): 저자가 붙인 세포유형 라벨(Malignant cell·HPC-like·T·B·TAM·CAF·TEC)을 <b>분석 입력으로 쓰지 않습니다</b>. 저자가 공개한 10x 원시 카운트 행렬(Set1+Set2)만 받아, <b>우리가 새로 짠 GPU 코드</b>(두 배치 병합 → QC → 정규화 → HVG → PyTorch 스케일·PCA → Harmony 시료 배치통합 → Leiden 클러스터링 → UMAP → marker 기반 세포유형 주석 → 비지도 GMM 악성/HPC-like 상피세포 분리)로 세포유형과 악성 종양세포를 <b>처음부터 다시 도출</b>합니다. 그런 다음 <b>독립 검증</b> 단계에서 우리 결과를 저자 라벨과 대조해(ARI·혼동행렬·악성 정확도) <b>원 논문 결론을 재현했는지</b> 정량 판정합니다(제2조).",
+    "steps": {
+      "setup": "GPU 분석 도구(Scanpy·PyTorch·Harmony·scikit-learn)를 설치합니다. 다른 예제와 <b>같은 환경</b>을 재사용하므로 이미 설치했다면 즉시 끝납니다.",
+      "download": "저자가 GEO(GSE125449)에 공개한 <b>10x 카운트 행렬(Set1+Set2, ~46 MB)</b>과 세포별 주석 파일(samples.txt)을 내려받습니다. 우리는 카운트만 입력으로 쓰고, 저자 라벨(Type)은 검증 단계까지 보관만 합니다.",
+      "gpu": "<b>GPU 독립 재분석.</b> Set1+Set2 병합(공통 유전자) → QC → 정규화 → HVG → <b>PyTorch로 GPU 스케일·PCA(SVD)</b> → <b>Harmony</b>로 시료 배치 통합 → <b>Leiden</b> 클러스터링 → UMAP → <b>marker 기반</b> 세포유형 주석 → <b>비지도 GMM</b>으로 악성/HPC-like 상피세포 분리. 저자 라벨은 이 단계에서 전혀 쓰지 않습니다(<code>author_labels.csv</code>로 보관만).",
+      "validate": "<b>독립 검증(제2조).</b> 우리 클러스터·세포유형·악성 판정을 저자 <code>Type</code> 라벨과 대조합니다. <b>ARI/NMI</b>(같은 방식으로 세포를 나눴는가), 세포유형 <b>혼동행렬</b>, 악성 상피세포 <b>정확도/F1</b>를 계산하고 재현/부분재현/불일치를 판정합니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. 독립 재분석 결과와 검증 지표를 해석하고, 원 논문 재현 여부를 판정하며 가설을 받습니다.",
+      "report": "독립 재분석 그림·검증 결과·해석을 하나의 <b>PDF 보고서</b>로 정리합니다."
+    },
+    "glossary": [
+      { "term": "독립 재현 (헌장 제1조)", "def": "저자의 결과 라벨을 그대로 받아쓰지 않고, 원자료에서 <b>우리 코드로 분석을 처음부터 다시 수행</b>해 같은 결론에 도달하는지 보는 것. 답지를 안 보고 스스로 풀어 정답과 맞추는 것과 같습니다." },
+      { "term": "간암 / HCC · iCCA", "def": "간세포에서 생기는 <b>간세포암(HCC)</b>과 담관세포에서 생기는 <b>간내담관암(iCCA)</b>. 이 데이터는 두 종류를 모두 포함합니다. 악성세포는 정상 간·담관 유전자와 함께 종양 유전자(GPC3·AFP 등)를 켭니다." },
+      { "term": "HPC-like (간 전구세포 유사)", "def": "간 줄기·전구세포와 닮은 상피세포 집단(PROM1·SOX9·EPCAM·KRT19). Ma 2019는 이 집단을 악성세포와 구분했지만, 둘 다 상피성이라 경계가 <b>본질적으로 애매</b>합니다." },
+      { "term": "GPU 스케일·PCA (PyTorch)", "def": "유전자 발현을 z-score로 표준화하고 SVD로 주성분(PCA)을 구하는 무거운 밀집 행렬 연산을 <b>GPU에서 PyTorch로</b> 가속합니다. 원 논문의 느린 R/CPU 대비 빠릅니다." },
+      { "term": "Harmony 배치 통합", "def": "시료·배치마다 생기는 기술적 차이(batch effect)를 보정해 여러 시료의 같은 세포유형이 섞이도록 임베딩을 정렬합니다. Set1·Set2와 여러 환자를 함께 분석하려면 필요합니다." },
+      { "term": "비지도 GMM 악성 분리", "def": "정답 라벨 없이, 상피세포의 <b>악성 서명 − 전구세포(HPC) 서명</b> 분포를 가우시안 혼합모델(GMM)로 두 무리(악성/HPC-like)로 나눕니다. 저자 판정을 참고하지 않고 데이터만으로 가릅니다." },
+      { "term": "ARI / 혼동행렬 / F1", "def": "두 분석이 세포를 얼마나 같게 나눴는지(ARI), 우리 세포유형이 저자 라벨과 어떻게 대응되는지(혼동행렬), 악성 판정이 얼마나 정확한지(정밀도·재현율의 조화평균 F1)를 재는 정량 지표입니다." },
+      { "term": "악성세포 다양성 (biodiversity)", "def": "종양 안 악성세포들의 전사체가 서로 얼마나 다른지. Ma 2019는 이 다양성이 클수록 미세환경(면역·기질)이 더 크게 재편되어 예후가 나빠진다고 보고했습니다." }
+    ]
+  }
+}

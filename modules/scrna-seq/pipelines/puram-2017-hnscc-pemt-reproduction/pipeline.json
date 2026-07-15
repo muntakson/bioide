@@ -1,0 +1,303 @@
+{
+  "id": "puram-2017-hnscc-pemt-reproduction",
+  "name": "Puram 2017 두경부암(HNSCC) p-EMT 프로그램 독립 재현",
+  "summary": "GSE103322 Smart-seq2 scRNA-seq를 Python·GPU·AI 스택으로 재분석해 p-EMT 프로그램과 전이 연관성을 방법 독립적으로 검증",
+  "dataSource": {
+    "provider": "GEO",
+    "dataset": "GSE103322 — HNSCC scRNA-seq (Smart-seq2, full-length, TPM 처리행렬, 5,902 세포)",
+    "datasetUrl": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE103322",
+    "fastqUrl": "",
+    "size": "약 5,902 세포 × ~23,000 유전자 (log2(TPM/10+1) 행렬)",
+    "note": "원시 FASTQ 미공개. 처리 완료 TPM 행렬(GSE103322_HNSCC_all_data.txt)에서 시작. 첫 단계에서 SRA raw 유무를 실제 확인 후 시작 경로 확정."
+  },
+  "steps": [
+    {
+      "id": "env",
+      "title": "Setup aarch64 Python/GPU environment",
+      "ko": "~/ghbio-venv 가상환경 생성 후 Scanpy·AnnData·scVI·rapids-singlecell·inferCNVpy·cNMF·pysradb 설치, STAR aarch64 소스 컴파일 준비",
+      "kind": "task",
+      "run": "bash 00_setup_env.sh",
+      "presentPath": "~/ghbio-venv/bin/activate"
+    },
+    {
+      "id": "availability",
+      "title": "Verify data availability",
+      "ko": "GEO GSE103322 supplementary 목록을 curl로 확인하고 pysradb로 SRA raw run 유무를 조회해 시작 경로(처리행렬 vs STARsolo)를 결정",
+      "kind": "task",
+      "run": "bash 01_check_availability.sh",
+      "produces": [
+        "data_availability.json"
+      ]
+    },
+    {
+      "id": "download",
+      "title": "Download processed matrix",
+      "ko": "GSE103322_HNSCC_all_data.txt.gz를 wget으로 내려받고 md5를 기록 (기본 경로)",
+      "kind": "task",
+      "run": "bash 02_download_matrix.sh",
+      "produces": [
+        "raw/GSE103322_HNSCC_all_data.txt",
+        "download_md5.txt"
+      ]
+    },
+    {
+      "id": "star_optional",
+      "title": "Optional STARsolo alignment (conditional)",
+      "ko": "조건부: SRA에 raw가 존재하면 BAM→FASTQ 복원 후 aarch64 소스 컴파일 STAR로 정렬·정량 (raw 부재 시 자동 스킵)",
+      "kind": "task",
+      "run": "bash 03_star_optional.sh",
+      "produces": [
+        "matrix/matrix.mtx"
+      ]
+    },
+    {
+      "id": "build_adata",
+      "title": "Parse matrix and build AnnData",
+      "ko": "log2(TPM/10+1)을 pseudo-count로 역변환(X=round(10*(2^logTPM-1)))하고 메타데이터를 결합해 AnnData 구축",
+      "kind": "task",
+      "run": "python 04_build_adata.py",
+      "produces": [
+        "adata_raw.h5ad"
+      ]
+    },
+    {
+      "id": "qc",
+      "title": "QC and filtering",
+      "ko": "Scanpy로 유전자/세포 검출수·mito%·ambient를 검토해 Smart-seq2 특성에 맞게 필터링",
+      "kind": "task",
+      "run": "python 05_qc.py",
+      "produces": [
+        "adata_qc.h5ad",
+        "qc_report.html"
+      ]
+    },
+    {
+      "id": "normalize",
+      "title": "Normalization and HVG selection",
+      "ko": "normalize_total + log1p 후 highly_variable_genes(seurat_v3)로 고변동 유전자 선택",
+      "kind": "task",
+      "run": "python 06_normalize_hvg.py",
+      "produces": [
+        "adata_norm.h5ad"
+      ]
+    },
+    {
+      "id": "latent",
+      "title": "GPU latent representation (scVI)",
+      "ko": "scVI(환자=batch)로 잠재표현 학습, rapids-singlecell로 PCA/neighbors 가속",
+      "kind": "task",
+      "run": "python 07_scvi_latent.py",
+      "produces": [
+        "model_scvi/model.pt",
+        "adata_latent.h5ad"
+      ]
+    },
+    {
+      "id": "cluster",
+      "title": "Clustering and UMAP",
+      "ko": "GPU Leiden 클러스터링과 UMAP 임베딩 산출",
+      "kind": "task",
+      "run": "python 08_cluster_umap.py",
+      "produces": [
+        "adata_clustered.h5ad",
+        "umap.png"
+      ]
+    },
+    {
+      "id": "malignant",
+      "title": "Malignant/non-malignant separation",
+      "ko": "inferCNVpy로 CNV 추론해 악성세포 판정 후 원 메타데이터 flag와 교차검증",
+      "kind": "task",
+      "run": "python 09_malignant_cnv.py",
+      "produces": [
+        "adata_annotated.h5ad",
+        "cnv_heatmap.png",
+        "celltype_ari.csv"
+      ]
+    },
+    {
+      "id": "programs",
+      "title": "Derive malignant expression programs (cNMF)",
+      "ko": "GPU cNMF로 악성세포에서 세포주기·스트레스·저산소·상피분화·p-EMT 등 발현 프로그램 추출",
+      "kind": "task",
+      "run": "python 10_cnmf_programs.py",
+      "produces": [
+        "programs.csv",
+        "program_heatmap.png"
+      ]
+    },
+    {
+      "id": "pemt_overlap",
+      "title": "Compare p-EMT program",
+      "ko": "원 논문 p-EMT top 유전자(PDPN, LAMC2, LAMB3, MMP10, TGFBI, ITGA5)와 도출 프로그램의 overlap·Jaccard·Spearman 상관 계산",
+      "kind": "task",
+      "run": "python 11_pemt_overlap.py",
+      "produces": [
+        "pEMT_overlap.csv",
+        "pEMT_overlap.json"
+      ]
+    },
+    {
+      "id": "subtype_stats",
+      "title": "Subtype and metastasis association tests",
+      "ko": "score_genes로 프로그램 점수화, p-EMT 점수 vs LN 전이/등급 통계검정, TCGA 아형 매핑",
+      "kind": "task",
+      "run": "python 12_subtype_stats.py",
+      "produces": [
+        "subtype_map.csv",
+        "stats.csv",
+        "stats.json"
+      ]
+    },
+    {
+      "id": "validate",
+      "title": "독립 검증 — 저자 라벨 미사용 재도출·대조",
+      "ko": "저자 라벨을 빼고 상피 계통 marker(EPCAM/KRT5/KRT14/SFN)로 악성세포를, marker로 세포유형을 다시 도출한 뒤 저자 라벨과 정량 대조 (정확도·F1·ARI·혼동행렬, 헌장 제1·2조)",
+      "kind": "task",
+      "run": "python 13_validate_vs_authors.py",
+      "produces": [
+        "validation_summary.csv",
+        "validation_verdict.txt",
+        "celltype_annotation.csv",
+        "confusion_celltype.csv",
+        "confusion_celltype.png",
+        "validation_bars.png"
+      ]
+    },
+    {
+      "id": "ai-verify",
+      "title": "Program interpretation and verdict",
+      "ko": "AI 패널이 클러스터 마커·프로그램·통계 산출물을 원 논문 4개 결론과 대조해 일치/부분일치/불일치를 판정하고 세포유형을 근거와 함께 지정",
+      "kind": "ai"
+    },
+    {
+      "id": "report",
+      "title": "Build reproduction report",
+      "ko": "모든 산출물을 종합해 원 논문 대비 정량 표·그림을 담은 PDF 재현 리포트 생성",
+      "kind": "task",
+      "run": "bash 05_make_report.sh",
+      "produces": [
+        "final_report.pdf"
+      ]
+    }
+  ],
+  "ai": {
+    "system": "You are a single-cell genomics expert helping reproduce Puram et al. 2017 (Cell), a Smart-seq2 scRNA-seq study of head and neck squamous cell carcinoma (HNSCC, GSE103322, 5,902 cells from 18 oral cavity patients). The paper distinguished malignant, stromal, and immune cells, and identified a partial-EMT (p-EMT) program in a subpopulation of malignant cells that expresses extracellular-matrix proteins (PDPN, LAMC2, LAMB3, MMP10, TGFBI, ITGA5) WITHOUT classical EMT transcription factors. p-EMT cells localize to the tumor leading edge and independently predict lymph-node metastasis, higher grade, and adverse pathology. Each patient maps to a TCGA-defined molecular subtype. This reproduction uses a fully independent Python/GPU/AI stack (Scanpy, scVI, cNMF, inferCNVpy) to test method-independence. Interpret cluster markers to assign cell types (malignant, CAF, endothelial, macrophage, T/B/NK), then compare cNMF-derived programs, Jaccard/Spearman overlaps, and metastasis statistics against the four original claims. Verdicts must be grounded in quantitative metrics, never AI narrative alone. Thresholds: cell-type ARI ≥0.7 concordant; p-EMT Jaccard ≥0.3 & Spearman ρ ≥0.5 concordant; metastasis direction-consistent & p<0.05 concordant; TCGA subtype ≥80% agreement concordant.",
+    "readyFile": "validation_summary.csv",
+    "readyHint": "독립 검증 결과가 없습니다. 먼저 '독립 검증' 단계를 실행해 validation_summary.csv 를 만들어 주세요.",
+    "context": [
+      {
+        "file": "validation_summary.csv",
+        "heading": "저자 라벨 대비 독립 검증 지표·판정 (validation_summary.csv)"
+      },
+      {
+        "file": "celltype_annotation.csv",
+        "heading": "우리 독립 marker 기반 세포유형 주석 (celltype_annotation.csv)"
+      },
+      {
+        "file": "celltype_ari.csv",
+        "heading": "세포유형 지정과 원 flag 일치율(ARI)"
+      },
+      {
+        "file": "programs.csv",
+        "heading": "cNMF 발현 프로그램"
+      },
+      {
+        "file": "pEMT_overlap.csv",
+        "heading": "p-EMT 시그니처 overlap·Jaccard·상관"
+      },
+      {
+        "file": "subtype_map.csv",
+        "heading": "TCGA 분자 아형 매핑"
+      },
+      {
+        "file": "stats.csv",
+        "heading": "p-EMT 점수 vs 전이·등급 통계"
+      }
+    ],
+    "prompts": [
+      {
+        "key": "celltype",
+        "label": "세포유형 지정",
+        "q": "클러스터별 rank_genes_groups 마커를 근거로 악성·CAF·내피·대식세포·T/B/NK 세포유형을 지정하고 각 근거를 서술해 주세요."
+      },
+      {
+        "key": "pemt",
+        "label": "p-EMT 프로그램 판정",
+        "q": "cNMF 프로그램 중 원 논문 p-EMT 시그니처와 가장 잘 대응하는 것을 찾고 Jaccard·Spearman 기준으로 C2 결론의 재현 여부를 판정해 주세요."
+      },
+      {
+        "key": "metastasis",
+        "label": "전이 연관 판정",
+        "q": "p-EMT 점수와 LN 전이·등급 간 통계결과를 방향·유의성 기준으로 평가해 C3 결론의 재현 여부를 판정해 주세요."
+      },
+      {
+        "key": "verdict",
+        "label": "종합 결론 판정",
+        "q": "원 논문 4개 핵심 결론(C1~C4)에 대해 각 정량 지표와 임계값을 대조해 일치/부분일치/불일치를 판정하고 근거를 요약해 주세요."
+      }
+    ],
+    "easyReport": {
+      "label": "🎓 고등학생 버전 보고서",
+      "makeReport": "05_make_easy_report.sh",
+      "title": "# 암세포는 어떻게 퍼질까? — 두경부암 p-EMT 프로그램 재현 이야기",
+      "datasetLabel": "GSE103322 (두경부암 단일세포 5,902개, Smart-seq2)",
+      "paperClaim": "두경부암에는 세포외기질 단백질을 만들지만 전형적 EMT 전사인자는 없는 '부분 EMT(p-EMT)' 세포가 종양 가장자리에 모여 있으며, 이것이 림프절 전이와 나쁜 예후를 독립적으로 예측한다."
+    }
+  },
+  "help": {
+    "intro": "이 파이프라인은 <b>Puram et al. 2017</b> 두경부암 scRNA-seq 논문(GSE103322)을 완전히 독립적인 <b>Python·GPU·AI 스택</b>으로 재분석합니다. 원 논문은 R 기반 사용자 정의 파이프라인을 썼지만, 여기서는 Scanpy·scVI·cNMF·inferCNVpy로 <b>p-EMT 프로그램</b>과 그 전이 연관성이 방법과 무관하게 재현되는지를 정량 검증합니다.",
+    "steps": {
+      "env": "aarch64 환경에 Python 가상환경과 분석 도구를 설치합니다. Cell Ranger 대신 STAR를 소스 컴파일합니다.",
+      "availability": "GEO와 SRA를 실제로 조회해 원시 FASTQ 존재 여부를 확인하고 시작 경로를 결정합니다.",
+      "download": "처리 완료 TPM 행렬을 내려받습니다(기본 경로).",
+      "star_optional": "원시 데이터가 있을 때만 실행되는 조건부 정렬 단계입니다. GSE103322는 raw가 없어 보통 스킵됩니다.",
+      "build_adata": "log2(TPM/10+1) 값을 pseudo-count로 역변환해 AnnData 객체를 만듭니다.",
+      "qc": "저품질 세포·유전자를 제거합니다(Smart-seq2 특성 반영).",
+      "normalize": "정규화 후 고변동 유전자를 선택합니다.",
+      "latent": "scVI로 환자 배치를 보정한 잠재표현을 학습합니다(GPU).",
+      "cluster": "Leiden 클러스터링과 UMAP으로 세포 집단을 나눕니다.",
+      "malignant": "inferCNVpy로 악성세포를 판정하고 원 메타데이터와 비교합니다.",
+      "programs": "cNMF로 악성세포의 발현 프로그램(p-EMT 포함)을 추출합니다.",
+      "pemt_overlap": "원 논문 p-EMT 유전자와 겹침 정도(Jaccard·상관)를 계산합니다.",
+      "subtype_stats": "p-EMT 점수와 전이·등급의 관계, TCGA 아형 매핑을 검정합니다.",
+      "validate": "<b>독립 검증(헌장 제1·2조).</b> 저자의 malignant/세포유형 라벨을 <b>빼고</b>, 상피(각질세포) 계통 marker(EPCAM/KRT5/KRT14/SFN)로 악성세포를, canonical marker로 세포유형을 <b>다시 도출</b>한 뒤 저자 라벨과 대조합니다. 악성세포 정확도·F1·ARI와 비악성 세포유형 정확도·ARI·혼동행렬로 재현/부분재현/불일치를 판정합니다. (기존 inferCNV 단독 판정보다 상피 marker 기반이 악성세포 회수율을 크게 높였습니다.)",
+      "ai-verify": "AI 패널이 정량 지표를 근거로 세포유형을 지정하고 4개 결론의 재현 여부를 판정합니다.",
+      "report": "모든 결과를 종합한 PDF 재현 리포트를 만듭니다."
+    },
+    "glossary": [
+      {
+        "term": "p-EMT (부분 상피-중간엽 전이)",
+        "def": "세포외기질 단백질(예: <i>LAMC2, PDPN</i>)은 발현하지만 전형적 EMT 전사인자는 없는 중간 상태. 종양 <b>leading edge</b>에 국재하며 전이와 연관됩니다."
+      },
+      {
+        "term": "Smart-seq2",
+        "def": "UMI가 없는 full-length 단일세포 시퀀싱 방식. 정량 단위가 TPM이며, 10x보다 세포수가 적지만 유전자 커버리지가 깊습니다."
+      },
+      {
+        "term": "cNMF",
+        "def": "consensus Non-negative Matrix Factorization. scRNA-seq에서 재현성 높은 발현 프로그램을 도출하는 표준 기법."
+      },
+      {
+        "term": "scVI",
+        "def": "변분 오토인코더 기반 확률적 모델로, 배치·기술 노이즈에 강건한 잠재표현을 GPU로 학습합니다."
+      },
+      {
+        "term": "inferCNVpy",
+        "def": "발현 패턴으로 대규모 복제수 변이(CNV)를 추론해 악성세포를 식별하는 Python 도구."
+      },
+      {
+        "term": "ARI (Adjusted Rand Index)",
+        "def": "두 클러스터링(여기선 독립 파이프라인 vs 원 라벨)의 일치도를 나타내는 지표. 1에 가까울수록 일치."
+      },
+      {
+        "term": "Jaccard 계수",
+        "def": "두 유전자 집합의 겹침 비율(교집합/합집합). p-EMT 시그니처 재현도를 측정합니다."
+      },
+      {
+        "term": "방법 독립성(method-independence)",
+        "def": "다른 알고리즘·언어·하드웨어로도 같은 생물학적 결론에 도달하는지를 시험하는 검증 개념."
+      }
+    ]
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "id": "glioblastoma-neftel-2019",
+  "name": "교모세포종 독립 재현 (Neftel 2019, GBM · GPU)",
+  "summary": "Neftel et al., Cell 2019 — 저자 상태 라벨을 소비하지 않고(GEO에 없음), 새로 짠 GPU·Python 코드로 악성 4상태(AC/MES/NPC/OPC-like)와 비악성 계통을 독립 재도출하고 저자 주장을 정량 검증 (BioIDE 헌장)",
+  "dataSource": {
+    "provider": "GEO (저자 공개 Smart-seq2 TPM 행렬 · 상태 라벨은 Broad SCP에만 있어 미사용)",
+    "dataset": "Neftel et al. 2019, Cell — An Integrative Model of Cellular States, Plasticity, and Genetics for Glioblastoma (Smart-seq2, 7,930 cells · 28 IDH-wt GBM tumors)",
+    "datasetUrl": "https://www.cell.com/cell/fulltext/S0092-8674(19)30776-X",
+    "fastqUrl": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM3828nnn/GSM3828672/suppl/GSM3828672_Smartseq2_GBM_IDHwt_processed_TPM.tsv.gz",
+    "size": "~297 MB (gzip) · 23,686 유전자 × 7,930 세포 TPM 행렬 (Smart-seq2 상태 정의 코호트)",
+    "note": "BioIDE 헌장 제1조에 따라 저자의 세포 상태 라벨을 분석 입력으로 쓰지 않습니다. Neftel의 per-cell 상태 라벨은 GEO에 없고 Broad Single Cell Portal(SCP393, 로그인 필요)에만 있어, 애초에 재도출이 필수입니다. 저자가 공개한 Smart-seq2 TPM 행렬만 받아 log2(TPM/10+1) → HVG → GPU(PyTorch) 스케일·PCA → Harmony(종양 배치) → Leiden → UMAP → 네 메타모듈(AC/MES/NPC/OPC-like) 점수화 → 악성/비악성 분리 → Neftel 2D butterfly 배치를 우리 코드로 수행합니다. 저자 상태 서명(Table S2 근사치)은 점수화에만 쓰고, 3단계 검증은 논문의 공개 주장(4상태 회수·연속체·순환 편중·비악성 계통)과 대조합니다(제2조).",
+    "download": {
+      "tar": "~/ghbio-tutorial/data/gbm-neftel2019/GSM3828672_Smartseq2_GBM_IDHwt_processed_TPM.tsv.gz",
+      "totalBytes": 311000000,
+      "extracted": "~/ghbio-tutorial/data/gbm-neftel2019/GSM3828672_Smartseq2_GBM_IDHwt_processed_TPM.tsv.gz"
+    }
+  },
+  "deepModule": true,
+  "steps": [
+    { "id": "setup", "title": "0. Setup GPU env (Scanpy·PyTorch·Harmony)", "ko": "GPU 분석 환경 설치 — 다른 예제와 공유", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
+    { "id": "download", "title": "1. Download GBM matrix (Neftel 2019, GSE131928)", "ko": "저자 공개 Smart-seq2 TPM 행렬(~297 MB) 내려받기", "kind": "task", "run": "bash 01_download_neftel.sh", "presentPath": "~/ghbio-tutorial/data/gbm-neftel2019/GSM3828672_Smartseq2_GBM_IDHwt_processed_TPM.tsv.gz" },
+    { "id": "gpu", "title": "2. GPU 독립 재분석 (저자 상태 라벨 미사용)", "ko": "TPM→HVG→GPU 스케일·PCA→Harmony→Leiden→UMAP→4상태 점수화→악성/비악성 분리→Neftel 2D (전부 우리 코드로 재도출)", "kind": "task", "run": "bash run_gpu_reanalysis.sh", "produces": ["gpu_reanalysis.h5ad", "celltype_composition.csv", "state_composition.csv", "state_cells.csv", "markers_by_cluster.csv", "umap_celltypes.png", "umap_state.png", "butterfly.png", "run_summary.txt", "provenance.json"] },
+    { "id": "validate", "title": "3. 독립 검증 — 저자 주장과 대조", "ko": "우리 독립 결과 vs 논문 주장: 4상태 회수·상태 서명 일관성·연속체 구조·순환 편중·비악성 계통·판정 (헌장 제2조)", "kind": "task", "run": "~/ghbio-venv/bin/python 03_validate_vs_authors.py", "produces": ["validation_summary.csv", "validation_verdict.txt", "validation_bars.png"] },
+    { "id": "ai", "title": "4. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 단발 패널)", "kind": "ai" },
+    { "id": "report", "title": "5. Generate PDF report", "ko": "독립 재분석 그림 + 검증 결과 + 해석을 하나의 PDF로", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_gbm_neftel2019_report.pdf"] }
+  ],
+  "ai": {
+    "system": "You are the BioIDE AI Co-Scientist for an INDEPENDENT GPU reproduction of Neftel et al. (Cell 2019), a single-cell RNA-seq study of glioblastoma (GBM). Per the BioIDE constitution, this pipeline did NOT consume the authors' per-cell state labels (they are not on GEO — only on Broad SCP behind a login): starting from the authors' published Smart-seq2 TPM matrix, our own GPU code re-derived cell types and the four malignant meta-modules from scratch — AC-like (astrocyte: AQP4/GFAP/S100B/SLC1A3), MES-like (mesenchymal: VIM/CD44/CHI3L1/ANXA1, plus hypoxia HILPDA/NDRG1/VEGFA), NPC-like (neural-progenitor: SOX4/SOX11/DCX/STMN2/DLL3), and OPC-like (oligodendrocyte-progenitor: OLIG1/OMG/PDGFRA/CSPG4/BCAN) — placing each malignant cell on Neftel's 2D butterfly (progenitor↔differentiated axis; NPC↔OPC / AC↔MES within). Non-malignant cells (macrophage/microglia CD14/AIF1/C1QB, T cell CD3D, oligodendrocyte MBP/MOG) were separated by markers. A validation step then compared our result to the paper's PUBLISHED CLAIMS: recovery of all four states, the state continuum with hybrids, cycling enrichment in NPC/OPC-like states, and the non-malignant lineages. Interpret results in the GBM context, note that the states are a plastic CONTINUUM (not discrete types), and judge whether our INDEPENDENT reanalysis REPRODUCES the authors' claims (agree/partial/disagree) citing the metrics. Distinguish observation from hypothesis. Reply in Korean unless asked otherwise.",
+    "readyFile": "validation_summary.csv",
+    "context": [
+      { "file": "state_composition.csv", "heading": "우리 독립 악성 4상태 구성 (state_composition.csv)" },
+      { "file": "celltype_composition.csv", "heading": "우리 독립 세포유형 구성 — 악성/비악성 (celltype_composition.csv)" },
+      { "file": "markers_by_cluster.csv", "heading": "우리 Leiden 클러스터별 top marker (markers_by_cluster.csv, top10)", "topByRank": 10 },
+      { "file": "validation_summary.csv", "heading": "저자 주장 대비 독립 검증 지표·판정 (validation_summary.csv)" }
+    ],
+    "readyHint": "검증 결과가 없습니다. 먼저 2단계(GPU 재분석)와 3단계(독립 검증)를 실행해 validation_summary.csv 를 만들어 주세요.",
+    "easyReport": {
+      "label": "🎓 고등학생 버전 보고서",
+      "makeReport": "05_make_easy_report.sh",
+      "title": "# 🔬 교모세포종 세포 상태 이야기 — 고등학생 쉬운 리포트",
+      "datasetLabel": "이 튜토리얼(교모세포종 GBM, Neftel 2019을 GPU로 독립 재현·검증)",
+      "paperClaim": "원 논문(Neftel et al., Cell 2019)의 핵심 주장: 교모세포종의 암세포는 네 가지 세포 상태(별세포 같은 AC, 중간엽 같은 MES, 신경전구 같은 NPC, 희소돌기전구 같은 OPC) 사이의 '연속체' 위에 흩어져 있다. 한 종양 안에 네 상태가 모두 존재하고, 세포는 상태를 넘나드는 유연성(가소성)을 가진다. 순환(분열)하는 세포는 전구 상태(NPC/OPC)에 더 많다. 유전자 변이가 상태를 편향시킨다(EGFR→AC, PDGFRA→OPC, NF1→MES, CDK4→NPC). BioIDE는 저자의 상태 라벨을 쓰지 않고(공개돼 있지도 않다) 새로 짠 GPU 코드로 네 상태를 처음부터 다시 찾아낸 뒤, 그 결과가 저자 주장과 일치하는지 정량 검증했다."
+    },
+    "prompts": [
+      { "key": "reproduce", "label": "재현 성공했나?", "q": "validation_summary.csv의 지표(4상태 회수·서명 일관성·연속체 구조·순환 편중·비악성 계통)를 근거로, 우리 독립 GPU 재분석이 Neftel 2019의 핵심 주장을 재현했는지 '재현/부분재현/불일치'로 판정해줘. 각 지표를 인용하고 어디서 잘 맞고 어디서 한계가 있는지(정확한 2축 기하는 저자 좌표 없이 확인 못 함) 설명해줘." },
+      { "key": "states", "label": "4상태 해석", "q": "state_composition.csv와 markers_by_cluster.csv를 근거로 AC/MES/NPC/OPC-like 네 상태의 정체성과 marker 근거를 표로 제시하고, 이들이 이산 유형이 아니라 연속체(가소성)라는 점을 우리 결과(각 상태 비율·hybrid)로 설명해줘." },
+      { "key": "cycling", "label": "순환·전구 상태", "q": "순환세포가 NPC/OPC-like 전구 상태에 편중된다는 우리 결과를 해석하고, 이것이 종양 성장·치료저항과 어떤 관련이 있을지 관찰과 가설을 분리해 설명해줘." },
+      { "key": "hypothesis", "label": "가설·기여", "q": "독립 재분석과 검증을 종합해 (1) 검증 가능한 가설 3~5개와 (2) 이 GPU 독립 재현의 기여(저자 라벨 없는 데이터에서 4상태 모델 재도출, 재현성 확인)를 서술해줘. 관찰과 가설을 분리하고 임상적 과장을 피해줘." },
+      { "key": "easy_report", "label": "🎓 고등학생 버전 보고서", "q": "이 분석(저자 라벨 없이 새로 짠 GPU 코드로 교모세포종 암세포의 네 상태를 다시 찾고, 논문 주장과 일치하는지 검증)을 바탕으로 **고등학생도 이해할 '쉬운 리포트'**를 작성해줘. 규칙: (1) 전문용어는 쉬운 말로 풀기. (2) **일상 비유를 아주 많이** — 예: 암세포=변장의 달인 배우, 네 상태=한 배우가 연기하는 네 가지 배역(별세포·중간엽·신경전구·희소돌기전구), 연속체=배역 사이를 자유로이 오가는 스펙트럼, hybrid=두 배역을 섞은 연기, 순환세포=계속 새끼를 치는 세포, UMAP·butterfly=비슷한 세포끼리 모은 지도, '독립 재현'=답지 안 보고 스스로 풀어 맞추기, 검증=채점. 비유 6개 이상. (3) 순서: ① 무엇을 왜 했는지 ② 암세포의 네 배역(상태) ③ 이들이 고정이 아니라 연속체라는 것 ④ 어떤 상태가 잘 분열하는지 ⑤ 논문과 얼마나 맞았는지(채점) ⑥ 왜 흥미롭고 앞으로 무엇을. (4) 친근한 말투, 순수 한국어. (5) 끝에 '💡 한 줄 요약'. 제목은 '# 🔬 교모세포종 세포 상태 이야기 — 고등학생 쉬운 리포트'." }
+    ]
+  },
+  "help": {
+    "intro": "이 예제는 <b>Neftel et al., Cell 2019</b>(교모세포종 GBM 단일세포)을 <b>BioIDE 헌장</b>에 따라 <b>독립 재현</b>합니다. 핵심 원칙(제1조): 저자가 매긴 세포 <b>상태 라벨</b>을 분석 입력으로 <b>쓰지 않습니다</b> — 이 데이터는 상태 라벨이 GEO에 없고 Broad SCP(로그인 필요)에만 있어 재도출이 필수입니다. 저자가 공개한 Smart-seq2 TPM 행렬만 받아, <b>우리가 새로 짠 GPU 코드</b>로 네 악성 메타모듈(AC/MES/NPC/OPC-like)과 비악성 계통(대식·T·희소돌기세포)을 <b>처음부터 다시 도출</b>하고 Neftel의 2D butterfly에 배치합니다. 그런 다음 <b>독립 검증</b> 단계에서 논문의 공개 주장과 대조해 재현 여부를 정량 판정합니다(제2조).",
+    "steps": {
+      "setup": "GPU 분석 도구(Scanpy·PyTorch·Harmony·scikit-learn)를 설치합니다. 다른 예제와 <b>같은 환경</b>을 재사용합니다.",
+      "download": "저자가 GEO(GSE131928)에 공개한 <b>Smart-seq2 TPM 행렬(~297 MB)</b>을 내려받습니다. 상태 라벨은 포함돼 있지 않습니다.",
+      "gpu": "<b>GPU 독립 재분석.</b> log2(TPM/10+1) → HVG → <b>PyTorch GPU 스케일·PCA</b> → <b>Harmony</b>(종양 배치) → Leiden → UMAP → 네 메타모듈 <b>점수화</b> → 악성/비악성 분리 → <b>Neftel 2D butterfly</b> 배치. 저자 상태 라벨은 쓰지 않습니다.",
+      "validate": "<b>독립 검증(제2조).</b> 라벨이 없으므로 논문 <b>주장</b>과 대조합니다: 네 상태 회수, 상태 서명 일관성, 연속체(양극+hybrid) 구조, 순환세포의 NPC/OPC 편중, 비악성 계통 회수. 재현/부분재현/불일치를 판정합니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. 4상태·연속체·순환·검증 결과를 해석하고 가설을 받습니다.",
+      "report": "독립 재분석 그림(UMAP·butterfly)·검증 결과·해석을 하나의 <b>PDF 보고서</b>로 정리합니다."
+    },
+    "glossary": [
+      { "term": "독립 재현 (헌장 제1조)", "def": "저자 라벨을 받아쓰지 않고 원자료에서 <b>우리 코드로 다시 분석</b>해 같은 결론에 도달하는지 보는 것. 이 데이터는 상태 라벨이 공개돼 있지도 않아 재도출이 필수입니다." },
+      { "term": "GBM 4상태 (AC/MES/NPC/OPC-like)", "def": "Neftel은 교모세포종 암세포가 <b>별세포 같은(AC)·중간엽 같은(MES)·신경전구 같은(NPC)·희소돌기전구 같은(OPC)</b> 네 상태의 <b>연속체</b> 위에 있다고 보고했습니다. 한 종양에 네 상태가 모두 존재합니다." },
+      { "term": "연속체 · 가소성 (plasticity)", "def": "네 상태는 고정된 세포 유형이 아니라 세포가 넘나드는 <b>연속적인 스펙트럼</b>입니다. 두 상태를 섞어 발현하는 <b>hybrid</b> 세포가 상당수 존재합니다." },
+      { "term": "메타모듈 점수화 (score_genes)", "def": "각 세포가 네 상태 서명 유전자를 얼마나 켜는지 <b>점수</b>로 매겨, 가장 높은 상태로 배정하고 2D 지도(butterfly)에 놓습니다. 저자의 KNN/좌표 대신 우리 점수화로 재도출합니다." },
+      { "term": "inferCNV / 악성 판정", "def": "저자는 발현 기반 <b>복제수 변이(chr7 증폭·chr10 결실)</b>로 악성세포를 가렸습니다. 우리는 계통 marker(악성=신경교/종양 프로그램, 비악성=면역·희소돌기)로 악성/비악성을 분리했습니다." },
+      { "term": "Smart-seq2", "def": "전장(full-length) 단일세포 시퀀싱 방식으로, 세포당 유전자 검출이 깊습니다. Neftel의 상태 정의 코호트(7,930 cells)가 이 방식으로 만들어졌습니다." }
+    ]
+  }
+}

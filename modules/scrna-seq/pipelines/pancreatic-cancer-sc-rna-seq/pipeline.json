@@ -1,0 +1,72 @@
+{
+  "id": "pancreatic-cancer-sc-rna-seq",
+  "name": "췌장암 독립 재현 (Peng 2019, PDAC · GPU)",
+  "summary": "Peng et al., Cell Research 2019 — 저자 라벨을 소비하지 않고, 새로 짠 GPU·Python 코드로 세포유형·악성 도관세포를 독립 재도출하고 저자 주장을 정량 검증 (BioIDE 헌장)",
+  "dataSource": {
+    "provider": "Zenodo (저자 공개 발현행렬 · 라벨은 검증용으로만 사용)",
+    "dataset": "Peng et al. 2019, Cell Research — Single-cell RNA-seq highlights intra-tumoral heterogeneity and malignant progression in PDAC (24 primary PDAC + 11 control, 57,423 cells)",
+    "datasetUrl": "https://www.nature.com/articles/s41422-019-0195-y",
+    "fastqUrl": "https://zenodo.org/records/3969339/files/StdWf1_PRJCA001063_CRC_besca2.annotated.h5ad?download=1",
+    "size": "~1.7 GB (.h5ad) · adata.raw = 17,004 유전자 log-정규화 행렬",
+    "note": "BioIDE 헌장 제1조에 따라 저자의 세포유형 라벨(Cell_type: 도관 type1/2 등)을 분석 입력으로 쓰지 않습니다. 저자가 공개한 log-정규화 발현행렬(adata.raw, 17k 유전자)만 입력으로 받아, HVG→GPU(PyTorch) 스케일·PCA→Harmony(환자 배치)→Leiden→UMAP→marker 기반 세포유형 주석→비지도 GMM 악성/정상 도관 분리를 우리 코드로 다시 수행합니다. 저자 라벨은 3단계 '독립 검증'에서만 대조용으로 사용합니다(제2조). scVI는 정수 카운트가 필요한데 공개 객체엔 카운트가 없어, GPU PyTorch 스케일+PCA 경로를 씁니다(제6조).",
+    "download": {
+      "tar": "~/ghbio-tutorial/data/pdac-peng2019/StdWf1_PRJCA001063_CRC_besca2.annotated.h5ad",
+      "totalBytes": 1800000000,
+      "extracted": "~/ghbio-tutorial/data/pdac-peng2019/StdWf1_PRJCA001063_CRC_besca2.annotated.h5ad"
+    }
+  },
+  "deepModule": true,
+  "steps": [
+    { "id": "setup", "title": "0. Setup GPU env (Scanpy·PyTorch·Harmony)", "ko": "GPU 분석 환경 설치 — 다른 예제와 공유", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
+    { "id": "download", "title": "1. Download PDAC matrix (Peng 2019, Zenodo)", "ko": "저자 공개 발현행렬(.h5ad, ~1.7 GB) 내려받기", "kind": "task", "run": "bash 01_download_peng_pdac.sh", "presentPath": "~/ghbio-tutorial/data/pdac-peng2019/StdWf1_PRJCA001063_CRC_besca2.annotated.h5ad" },
+    { "id": "gpu", "title": "2. GPU 독립 재분석 (저자 라벨 미사용)", "ko": "HVG→GPU 스케일·PCA→Harmony→Leiden→UMAP→marker 세포유형 주석→비지도 악성 도관 분리 (전부 우리 코드로 재도출)", "kind": "task", "run": "bash run_gpu_reanalysis.sh", "produces": ["gpu_reanalysis.h5ad", "celltype_annotation.csv", "markers_by_cluster.csv", "celltype_composition.csv", "malignant_ductal.csv", "ductal_summary.csv", "composition_by_condition.csv", "umap_celltypes.png", "umap_clusters.png", "umap_malignant.png", "composition.png", "author_labels.csv", "run_summary.txt", "provenance.json"] },
+    { "id": "validate", "title": "3. 독립 검증 — 저자 주장과 대조", "ko": "우리 독립 결과 vs 저자 라벨: ARI/NMI·혼동행렬·악성 도관 일치도(정확도/F1)·판정 (헌장 제2조)", "kind": "task", "run": "~/ghbio-venv/bin/python 03_validate_vs_authors.py", "produces": ["validation_summary.csv", "validation_verdict.txt", "confusion_celltype.csv", "confusion_celltype.png", "confusion_malignant.csv", "validation_bars.png"] },
+    { "id": "ai", "title": "4. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 단발 패널)", "kind": "ai" },
+    { "id": "report", "title": "5. Generate PDF report", "ko": "독립 재분석 그림 + 검증 결과 + 해석을 하나의 PDF로", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_pdac_peng2019_report.pdf"] }
+  ],
+  "ai": {
+    "system": "You are the BioIDE AI Co-Scientist for an INDEPENDENT GPU reproduction of Peng et al. (Cell Research 2019), a single-cell RNA-seq study of pancreatic ductal adenocarcinoma (PDAC). Per the BioIDE constitution, this pipeline did NOT consume the authors' cell-type labels: starting only from the authors' published log-normalised expression matrix, our own freshly-written GPU code (PyTorch scaling + PCA, Harmony patient integration, Leiden clustering, marker-based cell-type annotation, and an unsupervised GMM malignant/normal ductal split) re-derived the cell types and the malignant ductal population from scratch. A separate validation step then compared our independent results against the authors' Cell_type labels (ARI/NMI, confusion matrix, malignant-ductal accuracy/F1). Interpret the results in the PDAC context — malignant ductal cells (KRT19/EPCAM/MUC1/S100P/TM4SF1/LAMC2/CEACAM), acinar (PRSS1/CTRB2), endocrine (INS/GCG), stellate/fibroblast (ACTA2/COL1A1/RGS5), and immune compartments — and, crucially, judge whether our INDEPENDENT reanalysis REPRODUCES the authors' claims (agree / partial / disagree) citing the validation metrics. Distinguish observation from hypothesis; be explicit that agreement means two independent analyses converge, not that either is ground truth. Reply in Korean unless asked otherwise.",
+    "readyFile": "validation_summary.csv",
+    "context": [
+      { "file": "celltype_composition.csv", "heading": "우리 독립 세포유형 구성 (celltype_composition.csv)" },
+      { "file": "markers_by_cluster.csv", "heading": "우리 Leiden 클러스터별 top marker (markers_by_cluster.csv, top10)", "topByRank": 10 },
+      { "file": "malignant_ductal.csv", "heading": "우리 악성 vs 정상 도관 DE marker (malignant_ductal.csv)" },
+      { "file": "ductal_summary.csv", "heading": "우리 도관 분리 요약·악성 서명 점수 (ductal_summary.csv)" },
+      { "file": "validation_summary.csv", "heading": "저자 주장 대비 독립 검증 지표·판정 (validation_summary.csv)" }
+    ],
+    "readyHint": "검증 결과가 없습니다. 먼저 2단계(GPU 재분석)와 3단계(독립 검증)를 실행해 validation_summary.csv 를 만들어 주세요.",
+    "easyReport": {
+      "label": "🎓 고등학생 버전 보고서",
+      "makeReport": "05_make_easy_report.sh",
+      "title": "# 🔬 췌장암 세포 생태계 이야기 — 고등학생 쉬운 리포트",
+      "datasetLabel": "이 튜토리얼(췌장암 PDAC, Peng 2019을 GPU로 독립 재현·검증)",
+      "paperClaim": "원 논문(Peng et al., Cell Research 2019)의 핵심 주장: 췌장암(PDAC)에는 정상 도관세포(type 1)와 구별되는 악성 도관세포(type 2)가 종양에서 크게 늘어나며, 종양 내 이질성과 악성 진행을 이끈다. 종양 미세환경에는 섬유아·성상세포와 여러 면역세포가 다양하게 존재한다. BioIDE는 저자의 세포 라벨을 그대로 쓰지 않고, 새로 짠 GPU·Python 코드로 세포유형과 악성 도관세포를 처음부터 다시 찾아낸 뒤, 그 결과가 저자 결론과 일치하는지 정량적으로 검증했다."
+    },
+    "prompts": [
+      { "key": "reproduce", "label": "재현 성공했나?", "q": "validation_summary.csv의 ARI/NMI, 세포유형 라벨 일치 정확도, 악성 도관 판정 정확도/F1를 근거로, 우리 독립 GPU 재분석이 원 논문(Peng 2019)의 세포유형 구성과 악성 도관세포 결론을 재현했는지 '재현/부분재현/불일치'로 판정해줘. 각 지표를 인용하고, 어떤 세포유형·경계에서 잘 맞고 어디서 어긋나는지 설명해줘." },
+      { "key": "celltypes", "label": "독립 세포유형 해석", "q": "우리 marker 기반 세포유형 주석(celltype_composition.csv, markers_by_cluster.csv)을 근거로 각 세포유형의 정체성과 marker 근거를 표로 제시하고, 저자 라벨과 대조했을 때 애매하거나 병합/분할이 필요한 부분을 지적해줘." },
+      { "key": "malignant", "label": "악성 도관 독립 판정", "q": "우리는 저자 라벨 없이 비지도 GMM으로 악성/정상 도관을 나눴다. malignant_ductal.csv의 DE marker와 ductal_summary, 그리고 검증의 악성 정확도/F1를 근거로, 이 독립 판정이 저자의 ductal type1/type2 구분을 얼마나 재현하는지, KRT19/S100P/TM4SF1/CEACAM 등 근거와 함께 해석해줘." },
+      { "key": "hypothesis", "label": "가설·기여", "q": "독립 재분석과 검증 결과를 종합해, (1) 검증 가능한 가설 3~5개와 (2) 이 GPU 독립 재현이 커뮤니티에 주는 기여(원 논문 결론의 재현성 확인, 더 빠른 GPU 코드 제공)를 서술해줘. 관찰과 가설을 분리하고 임상적 과장을 피해줘." },
+      { "key": "easy_report", "label": "🎓 고등학생 버전 보고서", "q": "이 분석(저자 라벨 없이 새로 짠 GPU 코드로 세포유형·악성 도관세포를 다시 찾고, 저자 결론과 일치하는지 검증)을 바탕으로 **고등학생도 이해할 '쉬운 리포트'**를 작성해줘. 규칙: (1) 전문용어는 쉬운 말로 풀기. (2) **일상 비유를 아주 많이** — 예: 종양=여러 주민이 사는 도시, 정상 도관세포=규칙 지키는 배관공, 악성 도관세포=규칙 어기고 제멋대로 늘어난 세포, 면역세포=경찰·청소부, 섬유아·성상세포=건설업자, UMAP=비슷한 세포끼리 모은 지도, '독립 재현'=답지를 안 보고 스스로 풀어 정답과 맞춰보기, 검증=채점. 비유 6개 이상. (3) 순서: ① 무엇을 왜 했는지(답 안 보고 다시 분석) ② 어떤 세포들이 사는지 ③ 정상 vs 악성 도관을 스스로 어떻게 구분했는지 ④ 저자 결론과 얼마나 맞았는지(채점 결과) ⑤ 왜 흥미롭고 앞으로 무엇을. (4) 친근한 말투, 순수 한국어. (5) 끝에 '💡 한 줄 요약'. 제목은 '# 🔬 췌장암 세포 생태계 이야기 — 고등학생 쉬운 리포트'." }
+    ]
+  },
+  "help": {
+    "intro": "이 예제는 <b>Peng et al., Cell Research 2019</b>(췌장암 PDAC 단일세포)를 <b>BioIDE 헌장</b>에 따라 <b>독립 재현</b>합니다. 핵심 원칙(제1조): 저자가 붙인 세포유형 라벨(도관 type1/2 등)을 <b>분석 입력으로 쓰지 않습니다</b>. 저자가 공개한 log-정규화 발현행렬(약 1.7만 유전자)만 받아, <b>우리가 새로 짠 GPU 코드</b>(PyTorch 스케일·PCA → Harmony 환자 배치통합 → Leiden 클러스터링 → UMAP → marker 기반 세포유형 주석 → 비지도 GMM 악성/정상 도관 분리)로 세포유형과 악성 도관세포를 <b>처음부터 다시 도출</b>합니다. 그런 다음 <b>독립 검증</b> 단계에서 우리 결과를 저자 라벨과 대조해(ARI·혼동행렬·악성 정확도) <b>원 논문 결론을 재현했는지</b> 정량 판정합니다(제2조).",
+    "steps": {
+      "setup": "GPU 분석 도구(Scanpy·PyTorch·Harmony·scikit-learn)를 설치합니다. 다른 예제와 <b>같은 환경</b>을 재사용하므로 이미 설치했다면 즉시 끝납니다.",
+      "download": "저자가 Zenodo에 공개한 <b>발현행렬(.h5ad, ~1.7 GB)</b>을 내려받습니다. 우리는 이 안의 log-정규화 행렬(adata.raw, 1.7만 유전자)만 입력으로 쓰고, 저자 라벨은 검증 단계까지 보관만 합니다.",
+      "gpu": "<b>GPU 독립 재분석.</b> HVG 선택 → <b>PyTorch로 GPU 스케일·PCA(SVD)</b> → <b>Harmony</b>로 35명 환자 배치 통합 → <b>Leiden</b> 클러스터링 → UMAP → <b>marker 기반</b> 세포유형 주석 → <b>비지도 GMM</b>으로 악성/정상 도관 분리. 저자 라벨은 이 단계에서 전혀 쓰지 않습니다(<code>author_labels.csv</code>로 보관만).",
+      "validate": "<b>독립 검증(제2조).</b> 우리 클러스터·세포유형·악성 판정을 저자 <code>Cell_type</code>과 대조합니다. <b>ARI/NMI</b>(같은 방식으로 세포를 나눴는가), 세포유형 <b>혼동행렬</b>, 악성 도관 <b>정확도/F1</b>를 계산하고 재현/부분재현/불일치를 판정합니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. 독립 재분석 결과와 검증 지표를 해석하고, 원 논문 재현 여부를 판정하며 가설을 받습니다.",
+      "report": "독립 재분석 그림·검증 결과·해석을 하나의 <b>PDF 보고서</b>로 정리합니다."
+    },
+    "glossary": [
+      { "term": "독립 재현 (헌장 제1조)", "def": "저자의 결과 라벨을 그대로 받아쓰지 않고, 원자료에서 <b>우리 코드로 분석을 처음부터 다시 수행</b>해 같은 결론에 도달하는지 보는 것. 답지를 안 보고 스스로 풀어 정답과 맞추는 것과 같습니다." },
+      { "term": "GPU 스케일·PCA (PyTorch)", "def": "유전자 발현을 z-score로 표준화하고 SVD로 주성분(PCA)을 구하는 무거운 밀집 행렬 연산을 <b>GPU에서 PyTorch로</b> 가속합니다. 원 논문의 느린 R/CPU 대비 빠릅니다." },
+      { "term": "Harmony 배치 통합", "def": "환자마다 생기는 기술적 차이(batch effect)를 보정해 여러 환자의 같은 세포유형이 섞이도록 임베딩을 정렬합니다. 35명 환자 데이터를 함께 분석하려면 필요합니다." },
+      { "term": "비지도 GMM 악성 분리", "def": "정답 라벨 없이, 도관세포의 <b>PDAC 악성 서명 점수</b> 분포를 가우시안 혼합모델(GMM)로 두 무리(악성/정상)로 나눕니다. 저자의 type1/type2 판정을 참고하지 않고 데이터만으로 가릅니다." },
+      { "term": "ARI / 혼동행렬 / F1", "def": "두 분석이 세포를 얼마나 같게 나눴는지(ARI), 우리 세포유형이 저자 라벨과 어떻게 대응되는지(혼동행렬), 악성 판정이 얼마나 정확한지(정밀도·재현율의 조화평균 F1)를 재는 정량 지표입니다." },
+      { "term": "PDAC / 도관세포 type 1·2", "def": "췌장관 선암(PDAC)은 췌장 도관세포에서 생깁니다. 저자는 정상 도관(type1)과 악성 도관(type2)을 구분했고, BioIDE는 그 구분을 저자 라벨 없이 재현할 수 있는지 검증합니다." }
+    ]
+  }
+}
