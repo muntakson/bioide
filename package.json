@@ -2,7 +2,7 @@
   "name": "ghbio-coscientist",
   "displayName": "BioIDE",
   "description": "PlatformIO-style scRNA-seq bioinformatics IDE — projects, libraries, tutorials, and reliable single-shot AI analysis.",
-  "version": "0.8.7",
+  "version": "0.9.28",
   "publisher": "ghbio",
   "engines": {
     "vscode": "^1.85.0"
@@ -58,6 +58,11 @@
         "command": "ghbio.openHome",
         "title": "GHBIO: Open Home",
         "icon": "$(home)"
+      },
+      {
+        "command": "ghbio.openLanding",
+        "title": "GHBIO: Open Landing Page",
+        "icon": "$(rocket)"
       },
       {
         "command": "ghbio.openHelp",
