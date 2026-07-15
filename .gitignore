@@ -7,3 +7,6 @@ dist/
 .DS_Store
 __pycache__/
 *.pyc
+
+# vendored external reference repos (e.g. LUCA lung-atlas Nextflow pipeline)
+third_party/
