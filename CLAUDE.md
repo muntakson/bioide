@@ -50,6 +50,7 @@ file** — it is intended to also back a future headless HTTP "AI-as-a-webservic
 plain `Pipeline` values handed to it.
 - A stage has `kind: "task"` (runs `run` as a VS Code shell Task in the terminal, with ▶/✅/→next banners) or `kind: "ai"` (opens the AI panel). A stage may declare `produces: [...]` (artifacts relative to the results dir) → `isStageDone` marks it ✓ complete.
 - `pipeline.json` is preferred; legacy `tutorial.json` and a `steps` key are still parsed.
+- **"전체 분석 실행" (run whole pipeline)** chains every `task` stage from the start into **one** `&&`-joined shell Task (stops on first failure) and **breaks at the first `ai` stage** — steps after the AI stage (e.g. the report) are NOT auto-run. That full-run Task is named **`GHBIO: <pipeline name>`**; a single-step run is named **`GHBIO: <step title>`**. Surfaces detect "is it running" by matching those names against `vscode.tasks.taskExecutions` (server-side, so it stays correct across browser reloads) — see the Dashboard run-indicator and per-step ⏳ badges. Every stage script is idempotent, so a re-run resumes rather than restarts.
 
 ### Results are first-class project files — `GHBIO_RESULTS` is load-bearing
 Every stage/step is launched with the env var **`GHBIO_RESULTS`** pointing at that pipeline's OWN
@@ -58,12 +59,14 @@ script a pipeline runs MUST read `GHBIO_RESULTS`** (falling back to the legacy
 `~/ghbio-tutorial/results`, which is a symlink). A script that hardcodes the legacy path writes into
 the wrong project and the AI/report steps won't find its output — this has been a real bug. Heavy
 shared inputs (FASTQ, GRCh38 index, ~40 GB) stay under `~/ghbio-tutorial/` and are reused idempotently.
+- **Download scripts** declare `dataSource.download` (`tar`/`totalBytes`/`extracted`/`convert.watch`) in `pipeline.json`; the Dashboard's live status box reads those paths' sizes off disk (no coupling to the running process). Fetches must be resilient: guard against duplicate runs with a `flock` lock, and give `curl` `-C -` **plus `--speed-limit/--speed-time` (+`--retry`)** — without a stall timeout curl hangs forever on a half-open connection and blocks the next step behind the still-held lock (a real bug). Some human tumor 10x data ships only as a Cell Ranger BAM → reconstruct FASTQ with pysam (`bam2fastq.py`), since Cell Ranger can't run on this aarch64 box.
 
 ### AI Analysis panel (`src/ai/panel.ts`, `src/ai/providers.ts`)
 A webview that makes **one streaming request** to an LLM and renders the answer — **no agent, no
 tools, no file edits**, cancelable with Stop. This "reliability fix" is the whole point; do not
 reintroduce tool/agent loops here.
 - Providers: `anthropic`, `groq`, `openrouter`, `deepseek` (OpenAI-compatible). Keys in `~/.config/ghbio/providers.json` (chmod 600) — outside the repo.
+- `streamChat` takes an opt-in **`webSearch`** flag that adds Anthropic's **server-side `web_search` tool** — it runs *inside* the single streaming response (Anthropic performs the search, the model keeps writing), so the no-agent/no-tool-loop rule still holds. Ignored for non-Anthropic providers; the delta parser already skips non-text blocks. Used by the Create-pipeline panel to verify dataset accessions live.
 - The resolved `ai.context` result CSVs are read into the prompt. **Preset prompts** require result files to exist and are cached under `<results>/.ai_cache/`; **free-form questions** are answered anytime (results attached only when present).
 
 ### Report & paper generation (a cross-cutting concern — keep it consistent)
@@ -76,7 +79,18 @@ pipeline, mirror the **melanoma-tirosh** and **gpu-modern-reanalysis** pipelines
 ### UI surfaces (all plain-HTML webviews unless noted)
 `activate()` (`src/extension.ts`) tracks an **`activePipelineId`** (workspaceState, persisted) — the
 last pipeline the user touched — and context-aware surfaces follow it.
+
+**Webview authoring convention.** Every panel builds an HTML *string* with an inline `<script>`; the
+webview↔extension protocol is `postMessage` both ways (webview `{cmd,args}` → `executeCommand`, or
+`{type,...}` polls; extension replies `{type,...}`). Because the HTML is a JS template literal,
+**backslashes and backticks inside the embedded script are cooked by the outer template** — regex
+literals need doubled backslashes (`\\s`), and any script that itself uses backticks (a Markdown
+renderer's code-fence / inline-code handling) will prematurely close the template. `createPipeline.ts`
+avoids this by putting its script in a `String.raw` block and writing every backtick as the `\u0060`
+unicode escape. Markdown is rendered by small hand-rolled `md()` helpers per panel
+(headings/bold/code/lists/tables), not a library.
 - **Home (`src/home.ts`, `ghbio.openHome`)** — the landing card grid; opens on startup.
+- **Create pipeline (`src/createPipeline.ts`, `ghbio.openCreatePipeline`)** — a Home card → two-step AI flow: (1) find a public-data cancer scRNA-seq paper (dataset availability is the hard filter), (2) "design pipeline" drafts an AI/GPU/Python reproduction + independent-validation plan as collapsible Markdown, saved to `~/ghbio-workspace/pipeline-drafts/`. The plan is a *draft*, NOT auto-scaffolded into `modules/`.
 - **Dashboard (`src/dashboard.ts`, `ghbio.openDashboard`)** — PlatformIO-Home-style per-tutorial/project view: step checklist, library status, context Help, and live download/align/setup **status boxes** that poll the extension (`dlstatus`/`alignstatus`/`setupstatus` messages). One renderer serves both tutorials and plain projects (a tutorial *is* a project scaffolded by `ensureProject`).
 - **Help (`src/help.ts`, `ghbio.openHelp`)** — walkthrough + glossary tailored to `activePipelineId`, read from the pipeline's `help` block.
 - **Survey (`src/survey.ts`, `ghbio.openSurvey`/`openSurveyStats`)** — 이해도 테스트: form + aggregated stats, questions in the pipeline's `survey.json`, JSONL+CSV backend under `<results>/survey/`, server-side scoring. Surfaced via `ai.survey` in the manifest.

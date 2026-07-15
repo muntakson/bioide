@@ -1,24 +1,52 @@
 # BioIDE — Operations Guide (code-server + extension)
 
-A **VS Code IDE in the browser** (code-server) at **https://ghbiocosci.iotok.org**, with the
+A **VS Code IDE in the browser** (code-server) at **https://rna.bioide.org** (alias **https://www.bioide.org**), with the
 **BioIDE** extension (PlatformIO-style: Tutorials / Projects / Libraries + a reliable
 single-shot **AI Analysis** panel). Replaces the retired OpenScience app.
 
 ## Access
-- URL: **https://ghbiocosci.iotok.org** · password auth (code-server).
+- URL: **https://rna.bioide.org** (alias **https://www.bioide.org**) · password auth (code-server).
+  - DNS: both are proxied CNAMEs in the **bioide.org** Cloudflare zone → the **`scisonny`** tunnel
+    (`3ab62a94-c5fe-4f9b-88d4-69b1507da5f5.cfargotunnel.com`). Cloudflare edge provides TLS.
+  - The old **ghbiocosci.iotok.org** hostname was retired (tunnel ingress rule + iotok.org DNS record
+    removed, 2026-07-15). Cloudflare backups (tunnel config + deleted record) are in `~/ghbio-landing/cf-backup/`.
+  - To add/remove a hostname: edit the `scisonny` tunnel ingress via the Cloudflare API (token at
+    `~/.cloudflared/api_token`, account `1d6e73a1e83ebbb3978d19a321c3eed0`) — remotely-managed, so there
+    is **no local ingress file** — then add a proxied CNAME → `<tunnel-id>.cfargotunnel.com` in the zone.
 - Password: in `~/.config/code-server/config.yaml` (`password:`). Change it there + `systemctl --user restart ghbio-code`.
 - ⚠️ The IDE gives a full terminal/shell on this box. The password gate is the access control; add
   Cloudflare Access (Zero Trust) in front for stronger auth if needed.
 
+### Landing page / front proxy (nginx)
+The bare URL shows a **public BioIDE landing page** (intro + Enter + top-right Sign-in) *before* the
+code-server login. This is done with an **nginx front proxy**, all local (no Cloudflare dashboard change):
+- **code-server binds `127.0.0.1:8081`** (not 8080) — set in `~/.config/code-server/config.yaml`.
+- **nginx binds `127.0.0.1:8080`** (where cloudflared points) via the `ghbio-landing` user service.
+  Config + static page live in **`~/ghbio-landing/`** (`nginx.conf`, `index.html`, `logs/`, `run/`, `tmp/`).
+- Routing: `GET /` **with no `code-server-session` cookie → the landing page**; `GET /` once logged in
+  (cookie present) → the workbench; **everything else → code-server** (login, assets, websockets).
+  The Enter/Sign-in buttons link to `/login` (code-server's password gate) — auth is unchanged.
+- **Logout / return to landing:** nginx `sub_filter` injects a floating **"⎋ 로그아웃"** button (top-right)
+  into the workbench HTML (`location = /`, where `Accept-Encoding` is cleared so the injection works).
+  It links to `/logout`, which clears the `code-server-session` cookie and redirects to `/` → now
+  cookieless → the landing page. (`workbench.html` has no CSP, so the inline `<style>`/`<a>` is allowed.)
+- Edit the landing: change `~/ghbio-landing/index.html`, then `systemctl --user reload ghbio-landing`
+  (no code-server restart needed). Test config: `nginx -t -c ~/ghbio-landing/nginx.conf -p ~/ghbio-landing/`.
+- **Revert to no landing:** set code-server `bind-addr` back to `127.0.0.1:8080`, `systemctl --user
+  disable --now ghbio-landing && systemctl --user restart ghbio-code`. Backup at `config.yaml.pre-nginx-bak`.
+- The extension also has an in-IDE landing (`ghbio.openLanding`, command palette) but it does **not**
+  auto-open — post-login goes straight to Home, since the public landing already ran at the URL.
+
 ## Services (systemd --user, lingering on)
 | Service | Role |
 |---|---|
-| **ghbio-code** | code-server (VS Code) on `127.0.0.1:8080`, opens `~/ghbio-workspace` |
-| **ghbio-tunnel** | cloudflared → `ghbiocosci.iotok.org` → `127.0.0.1:8080` |
+| **ghbio-code** | code-server (VS Code) on `127.0.0.1:8081`, opens `~/ghbio-workspace` |
+| **ghbio-landing** | nginx front proxy on `127.0.0.1:8080` — landing page at `/` + reverse proxy to code-server |
+| **ghbio-tunnel** | cloudflared (`scisonny` tunnel) → `rna.bioide.org` / `www.bioide.org` → `127.0.0.1:8080` (→ nginx) |
 | ~~ghbio-app~~ | old OpenScience app — **disabled/retired** |
 
 ```bash
-systemctl --user status|restart ghbio-code ghbio-tunnel
+systemctl --user status|restart ghbio-code ghbio-landing ghbio-tunnel
 journalctl --user -u ghbio-code -n 50 --no-pager
 ```
 
