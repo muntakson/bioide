@@ -1,7 +1,7 @@
 {
   "id": "scrna-seq-therapy-induced-evolution",
   "name": "Therapy-induced evolution of lung cancer",
-  "summary": "Maynard et al. (Cell 2020): reproduce the authors' Smart-seq2 lung-cancer analysis",
+  "summary": "Maynard et al. (Cell 2020): a GPU-Python reanalysis of the Smart-seq2 lung-cancer atlas — QC, clustering, cell-type annotation, and how the tumor microenvironment shifts across TN→RD→PD treatment stages.",
   "dataSource": {
     "provider": "Maynard et al. / NCBI BioProject PRJNA591860",
     "dataset": "Therapy-Induced Evolution of Human Lung Cancer",
@@ -13,27 +13,99 @@
   },
   "deepModule": true,
   "steps": [
-    { "id": "setup", "title": "0. Set up legacy R / Seurat environment", "ko": "논문 당시 Seurat 분석 환경 설치", "kind": "task", "run": "bash 00_setup_legacy_r.sh", "presentPath": "~/ghbio-venv-r/maynard-2020/.ready" },
     { "id": "materials", "title": "1. Download authors' source code and data", "ko": "저자 GitHub 코드 + 공개 Data_input", "kind": "task", "run": "bash 01_fetch_author_materials.sh", "presentPath": "~/ghbio-tutorial/maynard-2020/scell_lung_adenocarcinoma/Data_input" },
-    { "id": "core", "title": "2. Build the published Seurat objects", "ko": "원 논문의 import · QC · merge · 전체 세포 clustering", "kind": "task", "run": "bash 02_run_authors_workflow.sh core", "produces": ["maynard-2020-core.complete"] },
-    { "id": "immune", "title": "3. Reproduce immune-compartment analysis", "ko": "면역세포 annotation 및 치료 상태 비교", "kind": "task", "run": "bash 02_run_authors_workflow.sh immune", "produces": ["maynard-2020-immune.complete"] },
-    { "id": "cancer", "title": "4. Prepare epithelial/CNV analysis", "ko": "암세포 분석 준비 · inferCNV 수동 단계 안내", "kind": "task", "run": "bash 02_run_authors_workflow.sh cancer", "produces": ["maynard-2020-cancer.complete"] },
-    { "id": "ai", "title": "5. AI interpretation & hypotheses", "ko": "결과 해석·후속 가설 (패널)", "kind": "ai" }
+    { "id": "gpu", "title": "2. GPU Python 재분석 (reanalysis)", "ko": "GPU 파이썬으로 QC·클러스터·세포주석·치료단계(TN/RD/PD) 조성 분석", "kind": "task", "run": "bash run_gpu_seurat.sh", "produces": ["gpu_seurat_workflow.h5ad", "celltype_annotation.csv", "composition_by_stage.csv", "markers_by_cluster.csv"] },
+    { "id": "ai", "title": "3. AI 해석 · 가설", "ko": "재분석 결과 해석·후속 가설 (패널)", "kind": "ai" },
+    { "id": "setup", "title": "L1. (선택·레거시 R) Seurat 분석 환경 설치", "ko": "원 논문 R 재현용 환경 (선택)", "kind": "task", "run": "bash 00_setup_legacy_r.sh", "presentPath": "~/ghbio-venv-r/maynard-2020/.ready" },
+    { "id": "core", "title": "L2. (선택·레거시 R) 원 논문 Seurat objects 재현", "ko": "원 논문 import·QC·merge·clustering (R)", "kind": "task", "run": "bash 02_run_authors_workflow.sh core", "produces": ["maynard-2020-core.complete"] },
+    { "id": "immune", "title": "L3. (선택·레거시 R) 면역 compartment 재현", "ko": "원 논문 면역세포 annotation (R)", "kind": "task", "run": "bash 02_run_authors_workflow.sh immune", "produces": ["maynard-2020-immune.complete"] },
+    { "id": "cancer", "title": "L4. (선택·레거시 R) 암세포/CNV 준비", "ko": "원 논문 epithelial·inferCNV 준비 (R)", "kind": "task", "run": "bash 02_run_authors_workflow.sh cancer", "produces": ["maynard-2020-cancer.complete"] }
   ],
+  "ai": {
+    "system": "당신은 단일세포 종양학 전문가입니다. 사용자는 Maynard et al., Cell (2020) '치료 유도 폐암 진화' 데이터셋을 GPU 파이썬으로 재분석했습니다. 이 연구의 핵심은 EGFR/ALK 표적치료 과정에서 종양과 미세환경이 어떻게 바뀌는지를, 치료 전(TN, treatment-naive)·잔존 질환(RD, residual disease)·진행 질환(PD, progressive disease) 세 단계로 비교하는 것입니다. 제공된 결과 CSV(세포유형 주석, 치료단계별 조성, 클러스터 마커)를 근거로, 재현 결과를 논문의 발견과 대조하며 한국어로 명확하게 해석하세요. 데이터에 없는 내용은 추측하지 말고, 수치를 인용해 설명하세요.",
+    "prompts": [
+      { "label": "치료단계 조성 변화 해석", "prompt": "composition_by_stage.csv를 바탕으로 TN→RD→PD로 가면서 어떤 세포유형(면역/비면역)의 비율이 늘거나 줄었는지 정리하고, 이것이 표적치료에 대한 종양 미세환경 재구성으로 무엇을 시사하는지 설명해줘." },
+      { "label": "세포유형 주석 요약", "prompt": "celltype_annotation.csv와 markers_by_cluster.csv를 바탕으로 각 클러스터가 어떤 세포유형으로 주석되었는지, 그 근거 마커가 타당한지 평가해줘." },
+      { "label": "논문 결과와 비교", "prompt": "이 재분석 결과를 Maynard et al. (2020)의 주요 발견(잔존 질환에서의 alveolar/재생 프로그램, 면역 미세환경 변화 등)과 비교하고, 일치·불일치 지점을 짚어줘." }
+    ],
+    "context": ["composition_by_stage.csv", "compartment_by_stage.csv", "celltype_annotation.csv", "qc_summary.csv"],
+    "readyFile": "composition_by_stage.csv"
+  },
   "help": {
-    "intro": "<b>Maynard et al., Cell (2020)</b>의 치료 유도 폐암 진화 단일세포 분석을 저자가 공개한 코드와 처리된 데이터를 사용해 재현합니다. 이 연구는 30명 환자의 49개 생검을 Smart-seq2로 분석했습니다.",
+    "intro": "<b>Maynard et al., Cell (2020)</b>의 치료 유도 폐암 진화 단일세포 데이터를 <b>GPU 파이썬으로 재분석</b>합니다. 원 논문의 R/Seurat 코드를 그대로 돌리는 대신, 동일한 저자 공개 count matrix에서 QC·클러스터링·세포유형 주석을 수행하고, 이 연구의 핵심인 <b>치료 단계(TN·RD·PD)에 따른 세포 조성 변화</b>를 재현합니다. (원 논문 R 재현은 하단 '레거시' 단계로 선택 실행할 수 있습니다.)",
     "steps": {
-      "setup": "논문 코드가 사용한 초기 Seurat API와 R 패키지를 전용 사용자 라이브러리에 설치합니다. 시간이 걸릴 수 있으며, 한 번만 하면 됩니다.",
-      "materials": "저자 저장소를 논문 공개 버전 commit으로 고정해 내려받고, README에 링크된 공개 Google Drive <code>Data_input</code> 폴더를 받습니다. 원본 FASTQ는 크므로 자동으로 받지 않습니다; 필요하면 BioProject PRJNA591860에서 받으세요.",
-      "core": "저자 notebooks 01, 02, 02.1, 03, 03.1을 순서대로 렌더링합니다. 입력 matrix/metadata에서 QC된 Seurat object, 전체 세포 clustering, immune/non-immune subset을 생성합니다.",
-      "immune": "저자 IM01–IM06 notebooks를 순서대로 실행합니다. 면역세포의 annotation과 treatment-stage별 변화를 재현합니다.",
-      "cancer": "저자 NI01–NI02 notebooks를 실행해 epithelial subset과 CNV 입력을 준비합니다. 공개 저장소에는 실제 inferCNV 실행 notebook(NI03.1)과 그 산출물이 없으므로, 다음 differential-expression notebooks(NI04–NI17)는 이 단계가 만든 안내 파일의 요구사항을 충족한 뒤에만 수동으로 실행할 수 있습니다.",
-      "ai": "완료된 Seurat object와 생성 그림을 확인한 뒤, 논문의 RD(잔존 질환)·PD(진행 질환) 특징과 자신의 재현 결과를 해석하는 데 AI 패널을 사용하세요."
+      "materials": "저자 저장소를 논문 공개 버전 commit으로 고정해 내려받고, README에 링크된 공개 Google Drive <code>Data_input</code> 폴더(Smart-seq2 count matrix + metadata)를 받습니다. 원본 FASTQ는 크므로 자동으로 받지 않습니다.",
+      "gpu": "저자의 S01 count matrix에서 QC(nCount>50k, nFeature>500) → LogNormalize → vst HVG → Scale → PCA를 GPU(PyTorch)로 실행하고, neighbors→Leiden→UMAP→마커를 계산합니다. 이어 표준 계통 마커(CD3D·CD68·EPCAM 등)로 각 클러스터를 세포유형으로 주석하고, 저자 metadata의 치료단계(<code>analysis</code>: naive→TN, grouped_pr→RD, grouped_pd→PD)별로 조성 변화를 정량화합니다. 결과: <code>celltype_annotation.csv</code>, <code>composition_by_stage.csv</code>, <code>compartment_by_stage.csv</code>, <code>umap_celltypes.png</code>, <code>composition_barplot.png</code>, <code>markers_by_cluster.csv</code>, <code>gpu_seurat_workflow.h5ad</code>. R 없이 독립적으로 실행됩니다.",
+      "ai": "완성된 세포유형 주석과 치료단계별 조성 결과를 확인한 뒤, AI 패널로 논문의 RD(잔존 질환)·PD(진행 질환) 특징과 자신의 재현 결과를 비교·해석하세요.",
+      "setup": "(선택) 원 논문 R 재현을 원할 때만 필요합니다. 논문 당시의 Seurat v4 스택을 전용 사용자 라이브러리에 설치합니다.",
+      "core": "(선택·레거시) 저자 notebooks 01–03.1을 렌더링해 원 논문 Seurat object를 재현합니다. 참고: 저자 코드는 당시 클러스터 수에 맞춘 수동 주석을 포함하므로, 재현 클러스터링과 완전히 일치하지 않을 수 있습니다.",
+      "immune": "(선택·레거시) 저자 IM01–IM06 notebooks로 면역세포 annotation을 재현합니다.",
+      "cancer": "(선택·레거시) 저자 NI01–NI02 notebooks로 epithelial subset과 CNV 입력을 준비합니다. 실제 inferCNV 실행 notebook은 공개 저장소에 없습니다."
     },
     "glossary": [
-      { "term": "TN / RD / PD", "def": "<b>TN</b>은 치료 전, <b>RD</b>는 표적치료 중 종양이 줄거나 안정적인 잔존 질환, <b>PD</b>는 치료 중 다시 진행한 질환입니다." },
-      { "term": "Smart-seq2", "def": "세포를 하나씩 plate에 분주해 전사체를 깊게 읽는 단일세포 RNA-seq 방법입니다. 이 논문은 droplet 10x 데이터가 아니라 Smart-seq2 count matrix를 사용합니다." },
-      { "term": "재현성 주의", "def": "원 코드에는 난수성과 수동 cluster annotation이 포함됩니다. 패키지·R 버전 차이 때문에 좌표나 cluster 번호의 완전한 일치는 보장되지 않습니다. 튜토리얼은 저자 code/data와 고정 commit을 보존해 추적 가능한 재실행을 제공합니다." }
+      { "term": "TN / RD / PD", "def": "<b>TN</b>은 치료 전(treatment-naive), <b>RD</b>는 표적치료 중 종양이 줄거나 안정적인 잔존 질환(residual disease), <b>PD</b>는 치료 중 다시 진행한 질환(progressive disease)입니다. 이 재분석에서는 저자 metadata의 <code>analysis</code> 컬럼(naive/grouped_pr/grouped_pd)으로 매핑합니다." },
+      { "term": "Smart-seq2", "def": "세포를 하나씩 plate에 분주해 전사체를 깊게 읽는 단일세포 RNA-seq 방법입니다. 이 논문은 droplet 10x가 아니라 Smart-seq2 count matrix를 사용합니다." },
+      { "term": "세포유형 주석(marker-based)", "def": "각 클러스터를 표준 계통 마커 signature(T세포 CD3D, 골수계 CD68/LYZ, 상피 EPCAM 등)에 대해 점수화해 가장 높은 유형으로 라벨링합니다. 저자의 수동 주석 '의도'를 결정론적으로 재현하는 방식입니다." },
+      { "term": "재현성 주의", "def": "패키지·난수 차이로 클러스터 번호·좌표가 원 논문과 정확히 일치하지는 않습니다. 이 재분석은 저자 알고리즘을 충실히 이식하되, 수동 큐레이션 부분은 데이터 기반 주석으로 대체합니다." }
+    ]
+  },
+  "codelab": {
+    "label": "BioIDE codelab",
+    "title": "GPU 단일세포 재분석 코드랩",
+    "subtitle": "이 튜토리얼의 실제 GPU 파이썬 분석 코드를 단계별로 보고, BioIDE 서버(또는 Google Colab)에서 직접 실행해 보세요.",
+    "intro": "원 논문(Maynard et al., Cell 2020)은 비공개 Smart-seq2 count matrix(약 1.5GB)를 사용하지만, 이 코드랩은 **동일한 알고리즘**을 어디서나 바로 받을 수 있는 공개 10x PBMC 3k 데이터에 적용해 그대로 실행할 수 있게 구성했습니다. **BioIDE 서버에서 실행**하면 이 박스의 GPU와 `ghbio-venv` 커널을 그대로 사용하고, **Colab에서 실행**하면 GPU 런타임을 켠 뒤(런타임 → 런타임 유형 변경 → GPU) 돌립니다.",
+    "colabUrl": "",
+    "notebook": "scrna-seq-therapy-induced-evolution_codelab.ipynb",
+    "cells": [
+      {
+        "title": "라이브러리 준비 (필요할 때만 설치)",
+        "desc": "**BioIDE 서버에서 실행**하면 모든 라이브러리가 이미 설치되어 있어 이 셀은 아무것도 설치하지 않습니다(공유 환경 보호). **Colab에서 실행**할 때만 빠진 패키지를 설치합니다.",
+        "code": "import importlib.util, subprocess, sys\nneed = [pip for pip, mod in [(\"scanpy\",\"scanpy\"),(\"torch\",\"torch\"),(\"leidenalg\",\"leidenalg\"),(\"python-igraph\",\"igraph\"),(\"scikit-misc\",\"skmisc\")] if importlib.util.find_spec(mod) is None]\nif need:\n    print(\"설치:\", need); subprocess.run([sys.executable, \"-m\", \"pip\", \"install\", \"-q\", *need], check=True)\nelse:\n    print(\"모든 라이브러리가 이미 설치되어 있습니다 — 설치를 건너뜁니다.\")"
+      },
+      {
+        "title": "라이브러리 불러오기 · GPU 확인",
+        "code": "import numpy as np, pandas as pd\nimport scanpy as sc, torch\nfrom scipy import sparse\n\ndevice = torch.device(\"cuda\" if torch.cuda.is_available() else \"cpu\")\nprint(\"장치:\", device, \"|\", torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU\")\nsc.settings.verbosity = 1\nnp.random.seed(2020); torch.manual_seed(2020)"
+      },
+      {
+        "title": "① GPU LogNormalize (Seurat NormalizeData)",
+        "desc": "Seurat의 `NormalizeData(LogNormalize)` 를 GPU로 이식합니다. `log1p(0)==0` 이라 희소성(sparsity)을 유지하며 비영(non-zero) 값만 변환합니다 — 원본 `gpu_seurat_workflow.py` 와 동일합니다.",
+        "code": "def gpu_lognormalize(counts, device, scale_factor=1e4):\n    counts = counts.tocsr().astype(np.float32)\n    totals = np.asarray(counts.sum(axis=1)).ravel()\n    totals[totals == 0] = 1.0\n    row_of_nnz = np.repeat(np.arange(counts.shape[0]), np.diff(counts.indptr))\n    data = torch.from_numpy(counts.data).to(device)\n    factor = torch.from_numpy((scale_factor / totals).astype(np.float32)).to(device)\n    normalized = torch.log1p(data * factor[torch.from_numpy(row_of_nnz).to(device)])\n    out = counts.copy(); out.data = normalized.cpu().numpy()\n    return out"
+      },
+      {
+        "title": "② GPU ScaleData + PCA (SVD)",
+        "desc": "`ScaleData`(평균 0·분산 1·clip)와 `RunPCA`(SVD로 scores = U·S)를 GPU에서 수행합니다.",
+        "code": "def gpu_scale(matrix, device, scale_max=10.0):\n    x = torch.from_numpy(np.ascontiguousarray(matrix, dtype=np.float32)).to(device)\n    mean = x.mean(0, keepdim=True); std = x.std(0, unbiased=True, keepdim=True)\n    std = torch.where(std == 0, torch.ones_like(std), std)\n    return torch.clamp((x - mean) / std, max=scale_max)\n\ndef gpu_pca(scaled, n_comps=50):\n    scaled = scaled - scaled.mean(0, keepdim=True)\n    u, s, _ = torch.linalg.svd(scaled, full_matrices=False)\n    return (u[:, :n_comps] * s[:n_comps]).cpu().numpy()"
+      },
+      {
+        "title": "③ 데이터 불러오기 & QC 필터",
+        "desc": "공개 10x **PBMC 3k** 데이터를 불러와 Seurat식 QC 필터를 적용합니다. (임계값은 이 데이터셋에 맞춘 값이고, 알고리즘 흐름은 원 논문과 같습니다.)",
+        "code": "adata = sc.datasets.pbmc3k()\nadata.var_names_make_unique()\nadata.layers[\"counts\"] = adata.X.copy()\nadata.obs[\"nCount_RNA\"] = np.asarray(adata.X.sum(1)).ravel()\nadata.obs[\"nFeature_RNA\"] = np.asarray((adata.X > 0).sum(1)).ravel()\nadata = adata[(adata.obs.nFeature_RNA > 200) & (adata.obs.nCount_RNA > 500)].copy()\nprint(f\"QC 통과 세포: {adata.n_obs:,}, 유전자: {adata.n_vars:,}\")"
+      },
+      {
+        "title": "④ 정규화 · 고변동 유전자(HVG)",
+        "code": "adata.X = gpu_lognormalize(adata.layers[\"counts\"], device)\nsc.pp.highly_variable_genes(adata, flavor=\"seurat_v3\", n_top_genes=2000, layer=\"counts\")\nhvg = np.where(adata.var[\"highly_variable\"].to_numpy())[0]\nprint(\"고변동 유전자:\", len(hvg))"
+      },
+      {
+        "title": "⑤ ScaleData · PCA (GPU)",
+        "code": "dense_hvg = np.asarray(adata.X[:, hvg].todense())\nscaled = gpu_scale(dense_hvg, device)\nadata.obsm[\"X_pca\"] = gpu_pca(scaled, n_comps=50)\ndel dense_hvg, scaled\nprint(\"PCA:\", adata.obsm[\"X_pca\"].shape)"
+      },
+      {
+        "title": "⑥ 이웃 그래프 · Leiden 군집 · UMAP",
+        "code": "sc.pp.neighbors(adata, use_rep=\"X_pca\", n_pcs=30, n_neighbors=20, random_state=2020)\nsc.tl.leiden(adata, key_added=\"seurat_clusters\", resolution=0.8,\n             flavor=\"igraph\", n_iterations=2, random_state=2020, directed=False)\nsc.tl.umap(adata, random_state=2020)\nprint(\"군집 수:\", adata.obs[\"seurat_clusters\"].nunique())\nsc.pl.umap(adata, color=\"seurat_clusters\", legend_loc=\"on data\")"
+      },
+      {
+        "title": "⑦ 마커 유전자 (Wilcoxon)",
+        "code": "sc.tl.rank_genes_groups(adata, groupby=\"seurat_clusters\", method=\"wilcoxon\", use_raw=False)\nsc.get.rank_genes_groups_df(adata, group=None).head(20)"
+      },
+      {
+        "title": "⑧ 마커 기반 세포유형 주석",
+        "desc": "각 군집을 표준 계통 마커 signature에 대해 점수화해 argmax로 라벨링합니다 — 저자의 수동 주석 '의도'를 결정론적으로 재현하는 방식입니다.",
+        "code": "CELL_TYPE_MARKERS = {\n    \"T cell\": [\"CD3D\",\"CD3E\",\"CD3G\",\"CD2\",\"TRAC\",\"CD8A\",\"CD4\",\"IL7R\"],\n    \"B_Plasma\": [\"CD79A\",\"CD79B\",\"MS4A1\",\"MZB1\",\"IGHG1\",\"IGKC\",\"CD19\"],\n    \"NK\": [\"NKG7\",\"GNLY\",\"KLRD1\",\"KLRF1\",\"NCAM1\",\"NCR1\"],\n    \"Myeloid\": [\"LYZ\",\"CD68\",\"CD14\",\"FCGR3A\",\"ITGAX\",\"AIF1\",\"C1QA\"],\n    \"Epithelial\": [\"EPCAM\",\"KRT19\",\"KRT18\",\"KRT8\",\"CDH1\"],\n}\nfor sig, genes in CELL_TYPE_MARKERS.items():\n    present = [g for g in genes if g in adata.var_names]\n    if present:\n        sc.tl.score_genes(adata, present, score_name=f\"_s_{sig}\")\n    else:\n        adata.obs[f\"_s_{sig}\"] = 0.0\nscores = adata.obs.groupby(\"seurat_clusters\", observed=True)[[f\"_s_{s}\" for s in CELL_TYPE_MARKERS]].mean()\nscores.columns = list(CELL_TYPE_MARKERS)\nassigned = scores.idxmax(axis=1)\nadata.obs[\"cell_type\"] = adata.obs[\"seurat_clusters\"].map(assigned).astype(\"category\")\nprint(assigned)\nsc.pl.umap(adata, color=\"cell_type\", legend_loc=\"right margin\", title=\"세포유형 (marker 기반)\")"
+      },
+      {
+        "title": "마무리 — 원본 파이프라인과의 관계",
+        "desc": "여기서 실행한 코드는 이 튜토리얼의 `gpu_seurat_workflow.py` 와 **동일한 알고리즘**입니다. 전체 튜토리얼에서는 여기에 더해, 저자 Smart-seq2 행렬에서 치료 단계(**TN → RD → PD**)별 세포 조성 변화까지 정량화합니다. 대시보드로 돌아가 '전체 분석 실행'을 눌러 실제 논문 데이터로 재현해 보세요."
+      }
     ]
   }
 }
