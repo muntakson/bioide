@@ -32,6 +32,18 @@ export function projectsDir(): string {
   return expandHome(cfg<string>("projectsDir", "~/ghbio-workspace/projects"))
 }
 
+// The Explorer's "home base" folder — the parent that holds both projects/ and pipeline-drafts/.
+// code-server opens this on startup; opening an individual project narrows the root, and Home
+// resets it back here (see src/explorer.ts).
+export function workspaceRootDir(): string {
+  return path.dirname(projectsDir())
+}
+
+// Where "파이프라인 만들기" writes its AI-drafted reproduction plans (*_plan.md).
+export function pipelineDraftsDir(): string {
+  return path.join(workspaceRootDir(), "pipeline-drafts")
+}
+
 // Each tutorial owns a project under projectsDir(); its outputs are first-class files
 // that live in that project's results/ folder (shown in the Projects view).
 export function tutorialProjectDir(tutorialId: string): string {
@@ -76,4 +88,15 @@ export async function runShellTask(name: string, command: string, cwd?: string, 
     clear: false,
   }
   return vscode.tasks.executeTask(task)
+}
+
+// A per-step "debug console" on the Dashboard tails this log. Redirect a step's
+// combined stdout+stderr to `<results>/.logs/<stepId>.log` via process substitution
+// (NOT a pipe) so the wrapped command's exit code — which the pipeline's `&&` chain
+// and the per-step ✅/⚠ banner both read from `$?` — is preserved. GHBIO_RESULTS is
+// always injected into these tasks' env; `ensureProject` pre-creates the .logs dir,
+// so tee can open the file immediately. `tee` also echoes to the terminal, so the
+// integrated-terminal view is unchanged.
+export function stepLogTee(stepId: string): string {
+  return `> >(tee "$GHBIO_RESULTS/.logs/${stepId}.log") 2>&1`
 }

@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import * as fs from "fs"
 import * as path from "path"
-import { runShellTask, tutorialProjectDir, tutorialResultsDir, expandHome } from "./util"
+import { runShellTask, tutorialProjectDir, tutorialResultsDir, expandHome, stepLogTee } from "./util"
 import type { AiConfig } from "./modules"
 
 // =============================================================================
@@ -59,6 +59,28 @@ export interface DataSource {
   }
 }
 
+// A single step of a "BioIDE codelab": either a prose cell (markdown) or a code cell
+// (Python shown on the codelab page AND emitted into a runnable Colab .ipynb). Declared in
+// pipeline.json so the code the user sees is the same code that ends up in the notebook.
+export interface CodelabCell {
+  title?: string // short heading above this step
+  desc?: string // ko explanation (minimal markdown) — becomes a markdown cell before the code
+  code?: string // Python source; when present, emitted as a code cell
+}
+
+// The "BioIDE codelab" card/page for a pipeline: shows the pipeline's actual code as a
+// sequence of cells and offers a runnable Google Colab notebook (generated from `cells`).
+export interface Codelab {
+  label?: string // dashboard-card / button text (default "BioIDE codelab")
+  title?: string // page H1
+  subtitle?: string // one-line page subtitle
+  intro?: string // markdown paragraph above the cells
+  colabUrl?: string // a hosted Colab notebook to open directly (one-click). When absent, the
+  // page generates a local .ipynb and opens Colab's upload flow instead.
+  notebook?: string // filename for the generated .ipynb (default "<pipelineId>_codelab.ipynb")
+  cells: CodelabCell[]
+}
+
 export interface Pipeline {
   id: string
   name: string
@@ -67,6 +89,7 @@ export interface Pipeline {
   stages: Stage[]
   help?: PipelineHelp
   dataSource?: DataSource
+  codelab?: Codelab
   // A pipeline can replace a module-wide AI prompt set when its biology differs
   // materially (e.g. lung cancer rather than PBMC), while reusing the module UI.
   ai?: Partial<AiConfig>
@@ -88,6 +111,7 @@ export function loadPipelineFromDir(dir: string): Pipeline | undefined {
         stages: m.stages ?? m.steps ?? [],
         help: m.help,
         dataSource: m.dataSource,
+        codelab: m.codelab,
         ai: m.ai,
       }
     } catch (e) {
@@ -143,6 +167,9 @@ export function ensureProject(p: { id: string; name: string; summary?: string })
   const projectDir = tutorialProjectDir(p.id)
   const resultsDir = tutorialResultsDir(p.id)
   fs.mkdirSync(resultsDir, { recursive: true })
+  // Per-step debug logs (tailed by the Dashboard console) live here; pre-create so
+  // the tee redirect in `stepLogTee` can open its file immediately.
+  fs.mkdirSync(path.join(resultsDir, ".logs"), { recursive: true })
   const notes = path.join(projectDir, "notes.md")
   if (!fs.existsSync(notes)) {
     fs.writeFileSync(
@@ -161,7 +188,7 @@ function stageBlock(s: Stage): string {
   return (
     `printf "\\n\\033[1;36m▶ %s\\033[0m\\n" "${title}"; ` +
     `echo "  실행 중… 끝나면 ✅ 표시가 나옵니다."; ` +
-    `{ ${s.run}; }`
+    `{ ${s.run}; } ${stepLogTee(s.id)}`
   )
 }
 

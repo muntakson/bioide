@@ -166,7 +166,7 @@ function html(pipe?: Pipeline): string {
   <div class="step">
     <div class="head"><div class="badge">1</div><div class="title">인터넷 주소 열기</div></div>
     <p>크롬(Chrome) 같은 브라우저를 켜고, 받으신 <b>인터넷 주소(URL)</b>를 주소창에 입력합니다.</p>
-    <p>예: <code>https://ghbiocosci.iotok.org</code></p>
+    <p>예: <code>https://rna.bioide.org</code></p>
   </div>
   <div class="step">
     <div class="head"><div class="badge">2</div><div class="title">비밀번호 입력하기</div></div>

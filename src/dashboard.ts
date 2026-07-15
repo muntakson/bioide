@@ -47,6 +47,10 @@ export function openDashboard(context: vscode.ExtensionContext, target?: Dashboa
         panel?.webview.postMessage({ type: "runstatus", ...currentRunStatus() })
         return
       }
+      if (m?.type === "steplog" && typeof m.id === "string") {
+        panel?.webview.postMessage({ type: "steplog", id: m.id, ...currentStepLog(m.id) })
+        return
+      }
       if (m?.cmd) vscode.commands.executeCommand(m.cmd, ...(m.args ?? []))
     })
   }
@@ -77,6 +81,7 @@ interface StepView {
   tracked: boolean
   done: boolean
   running: boolean
+  kind?: string
 }
 interface FileView {
   name: string
@@ -102,6 +107,7 @@ interface DashboardView {
   results: FileView[]
   libraries: LibView[]
   hasHelp: boolean
+  codelab?: { label: string; subtitle?: string }
   dataSource?: DataSource
   // True while the WHOLE-pipeline auto-run task (`GHBIO: <name>`) is executing. Distinct from a
   // per-step task (`GHBIO: <step title>`), so the ▶▶ 전체 분석 실행 button can show "running".
@@ -151,6 +157,7 @@ function tutorialView(m: Module, p: Pipeline): DashboardView {
     tracked: stageTracked(s),
     done: stageComplete(p.id, s) === true,
     running: runningNames.has(`GHBIO: ${s.title.replace(/"/g, "")}`),
+    kind: s.kind,
   }))
   const trackedSteps = steps.filter((s) => s.tracked)
   const libraries: LibView[] = (m.libraries ?? []).map((l) => ({
@@ -172,6 +179,7 @@ function tutorialView(m: Module, p: Pipeline): DashboardView {
     results: listFiles(tutorialResultsDir(p.id)),
     libraries,
     hasHelp: !!p.help,
+    codelab: p.codelab?.cells?.length ? { label: p.codelab.label || "BioIDE codelab", subtitle: p.codelab.subtitle } : undefined,
     dataSource: p.dataSource,
     running: runningNames.has(`GHBIO: ${p.name}`),
   }
@@ -353,6 +361,32 @@ function currentSetupStatus(): { applicable: boolean; phase: "idle" | "running" 
   return { applicable: true, phase: "idle", lines: ["· Setup has not started. Click Step 0 once to install the legacy R environment."] }
 }
 
+// Tail of a step's debug log (`<results>/.logs/<stepId>.log`, written by stepLogTee) plus
+// whether that step's per-step task is currently running. The dashboard's collapsible debug
+// console polls this and shows the last ~40 lines so a long step (e.g. rendering the Seurat
+// notebooks) is visibly making progress instead of looking frozen.
+function currentStepLog(stepId: string): { hasLog: boolean; running: boolean; lines: string[] } {
+  const empty = { hasLog: false, running: false, lines: [] as string[] }
+  if (!last) return empty
+  const view = resolve(loadModules(last.context), last.target)
+  const step = view.steps.find((s) => s.id === stepId)
+  // "Running" covers both a per-step task and the whole-pipeline auto-run (which drives the
+  // same per-step log through stageBlock), so the console keeps polling in either mode.
+  const running = !!step?.running || !!view.running
+  let lines: string[] = []
+  try {
+    lines = fs
+      .readFileSync(path.join(view.dir, "results", ".logs", `${stepId}.log`), "utf8")
+      .split("\n")
+      .map((l) => l.replace(/\x1b\[[0-9;]*m/g, "").replace(/\r/g, "").replace(/\s+$/, ""))
+      .filter((l) => l.length)
+      .slice(-40)
+  } catch {
+    /* step has not run yet — no log */
+  }
+  return { hasLog: lines.length > 0, running, lines }
+}
+
 // ---- rendering --------------------------------------------------------------
 
 const esc = (s: unknown) =>
@@ -463,7 +497,19 @@ function html(v: DashboardView): string {
                <pre id="setuplog">${setupText}</pre>
              </details>`
           : ""
-      return stepDiv + setupBox + dlBox + alignBox
+      // Generic per-step debug console for every runnable step that lacks a specialised box
+      // (the download/align/setup boxes above already show their own progress). It tails the
+      // step's .logs/<id>.log so a long-running step shows live output. Opens automatically
+      // while the step is running; otherwise collapsed to keep the checklist tidy.
+      const hasSpecialBox = !!dlBox || !!alignBox || !!setupBox
+      const debugBox =
+        v.pipelineId && s.kind !== "ai" && !hasSpecialBox
+          ? `<details id="debugbox-${esc(s.id)}" class="dlbox debugbox" data-step="${esc(s.id)}"${s.running ? " open" : ""}>
+               <summary>🐞 디버그 콘솔 (progress log) · 자동 새로고침</summary>
+               <pre id="debuglog-${esc(s.id)}">${s.running ? "실행 로그를 불러오는 중…" : "이 단계를 실행하면 진행 로그가 여기에 표시됩니다."}</pre>
+             </details>`
+          : ""
+      return stepDiv + setupBox + dlBox + alignBox + debugBox
     })
     .join("\n")
 
@@ -549,6 +595,11 @@ function html(v: DashboardView): string {
   button.paperbtn.pdf { margin-top:8px; background:linear-gradient(135deg,#be123c,#7c3aed); }
   button.paperbtn.hs { margin-top:8px; background:linear-gradient(135deg,#f59e0b,#eab308); color:#3a2a00; }
   button.paperbtn:hover { filter:brightness(1.08); }
+  /* BioIDE codelab card — Colab-flavored amber */
+  .codelab-card { border-color:#3a3320; background:linear-gradient(180deg,#171410,#12181f); }
+  button.codelabbtn { margin-top:12px; width:100%; justify-content:center; padding:9px 14px;
+    background:linear-gradient(135deg,#f9ab00,#f57c00); color:#201400; font-weight:800; }
+  button.codelabbtn:hover { filter:brightness(1.06); }
   button[disabled] { cursor:default; opacity:.6; }
   /* Open-project button, status-aware */
   button.open-warn { background: linear-gradient(135deg,#f5b73d,#f0883e); color:#2a1705; font-weight:800;
@@ -581,6 +632,10 @@ function html(v: DashboardView): string {
   /* The legacy-R setup box is deliberately only three lines tall: enough to show progress while
      preserving the tutorial checklist as the primary interface. */
   .setupbox pre { height:4.5em; }
+  /* The generic debug console gets a taller viewport (≈10 lines) since it streams a full step's
+     stdout, and a distinct summary tint so it reads as "developer detail", not a required step. */
+  .debugbox > summary { color:#c8923a; }
+  .debugbox pre { height:15em; }
   /* "?" help icon with a hover popup explaining the current step + time estimate */
   .qmark { display:inline-block; width:15px; height:15px; line-height:15px; text-align:center; border-radius:50%;
     background:#21313a; color:#7ee7d6; font-size:11px; font-weight:700; cursor:help; position:relative; }
@@ -649,6 +704,15 @@ function html(v: DashboardView): string {
       ${
         isTut
           ? `<div class="card"><h2>라이브러리(도구) 상태</h2>${libRows || '<div class="empty">이 모듈에 등록된 라이브러리가 없습니다.</div>'}</div>`
+          : ""
+      }
+      ${
+        isTut && v.codelab
+          ? `<div class="card codelab-card">
+        <h2>💻 ${esc(v.codelab.label)}</h2>
+        <div class="empty" style="color:#c9d4de">${esc(v.codelab.subtitle || "이 튜토리얼의 실제 분석 코드를 단계별로 보고, 이 서버(또는 Google Colab)에서 직접 실행해 보세요.")}</div>
+        <button class="codelabbtn" onclick="send('ghbio.openCodelab','${esc(v.pipelineId)}')">코드랩 열기 · 서버/Colab에서 실행 →</button>
+      </div>`
           : ""
       }
       <div class="card">
@@ -847,6 +911,30 @@ function html(v: DashboardView): string {
       window.addEventListener('message', ev => { if (ev.data && ev.data.type==='runstatus') onStatus(ev.data) })
       function poll(){ vscode.postMessage({ type:'runstatus' }) }
       poll(); setInterval(poll, 4000)
+    })()
+
+    // ---- Generic per-step debug console -------------------------------------
+    // One poller drives every 🐞 debug console. Each poll asks the extension for the tail of that
+    // step's .logs/<id>.log; the extension is the source of truth (tail -40), so we just replace the
+    // <pre>. Polls only OPEN consoles (collapsed ones stay quiet), plus an immediate poll on expand.
+    (function(){
+      const boxes = Array.from(document.querySelectorAll('.debugbox'))
+      if (!boxes.length) return
+      function pollBox(box){ if (box.open) vscode.postMessage({ type:'steplog', id: box.dataset.step }) }
+      function pollAll(){ boxes.forEach(pollBox) }
+      window.addEventListener('message', ev => {
+        const m = ev.data
+        if (!m || m.type !== 'steplog') return
+        const pre = document.getElementById('debuglog-' + m.id)
+        if (!pre) return
+        const stick = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24
+        pre.textContent = (m.lines && m.lines.length)
+          ? m.lines.join('\\n')
+          : (m.running ? '실행 중… (아직 출력이 없습니다)' : '아직 실행 로그가 없습니다. 이 단계를 실행해 보세요.')
+        if (stick) pre.scrollTop = pre.scrollHeight
+      })
+      boxes.forEach(b => b.addEventListener('toggle', () => pollBox(b)))
+      pollAll(); setInterval(pollAll, 3000)
     })()
   </script>
 </body></html>`

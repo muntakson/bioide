@@ -1,8 +1,12 @@
 import * as vscode from "vscode"
 import * as fs from "fs"
 import * as path from "path"
-import * as os from "os"
 import { loadProviders, streamChat } from "./ai/providers"
+import { BIOIDE_MISSION, missionHtml } from "./mission"
+
+// Every AI step that helps create a tutorial is bound by the BioIDE constitution.
+const withMission = (prompt: string): string => `${BIOIDE_MISSION}\n\n${prompt}`
+import { pipelineDraftsDir } from "./util"
 
 // =============================================================================
 // "Create pipeline" — a Home card that helps a user turn a published cancer
@@ -66,8 +70,10 @@ const DESIGN_SYSTEM =
   "'최신 AI·GPU·Python 스택으로 독립 재현하고 결론을 검증'하는 BioIDE 튜토리얼 계획을 한국어 **Markdown**으로 작성하세요. " +
   "BioIDE 특성: 데이터 기반 파이프라인으로 각 단계가 셸 Task(kind:\"task\")나 AI 패널(kind:\"ai\")로 실행되고, 결과는 프로젝트 파일로 저장됩니다. " +
   "aarch64 장비라 Cell Ranger 대신 STARsolo를 소스 컴파일해 씁니다. 공개 데이터가 BAM만 있으면 pysam으로 FASTQ를 복원하고, " +
-  "처리 완료 행렬만 있으면 그 행렬에서 시작합니다. 원 논문이 R/Seurat를 썼다면 Python(Scanpy)·GPU(scVI/rapids-singlecell)·AI 해석으로 대체해, " +
-  "'다른 독립적 데이터 처리가 원 논문과 같은 결론에 이르는지'를 검증하는 것이 핵심 목표입니다. " +
+  "공개 데이터가 처리 완료 행렬뿐이어도 그 행렬에서 QC·정규화·클러스터링·세포유형 주석·악성세포 식별을 우리 코드로 처음부터 다시 수행하고, " +
+  "저자가 붙인 라벨·주석은 분석 입력으로 절대 소비하지 말고 오직 검증 대조용으로만 사용합니다(헌장 제1조). " +
+  "원 논문이 R/Seurat를 썼다면 Python(Scanpy)·GPU(scVI/rapids-singlecell/PyTorch)·AI 해석으로 대체해, " +
+  "'우리가 독립적으로 새로 짠 데이터 처리가 원 논문과 같은 결론에 이르는지'를 정량적으로 검증하는 것이 핵심 목표입니다. " +
   "다음 구성을 반드시 포함하세요:\n" +
   "1. 개요 — 원 논문과 검증 대상이 되는 핵심 결론\n" +
   "2. 데이터 — 공개 접근번호·규모·획득 방법(FASTQ/BAM→FASTQ/처리행렬 중 무엇으로 시작할지)\n" +
@@ -116,6 +122,221 @@ function buildDesignPrompt(c: Candidate, focus: string): string {
 const escHtml = (s: string) =>
   String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!)
 
+// =============================================================================
+// Draft → scaffold: turn a saved reproduction PLAN (.md) into a full pipeline
+// scaffold (pipeline.json + one draft shell/python script per stage) written to a
+// STAGING folder pipeline-drafts/<id>/ for the user to review and later promote into
+// modules/. Orchestrated by deterministic code over several single-shot streamChat
+// calls (one for the manifest, one per script) — no agent loop.
+// =============================================================================
+
+const MANIFEST_SYSTEM =
+  "You convert a Korean scRNA-seq reproduction PLAN into a BioIDE `pipeline.json` manifest, output as PURE JSON " +
+  "(no code fence, no prose — the whole reply must be one JSON object). Match this schema exactly:\n" +
+  "{\n" +
+  '  "id": "kebab-case-id", "name": "한국어 파이프라인 이름", "summary": "한 줄 요약",\n' +
+  '  "dataSource": { "provider": "GEO/SRA 등", "dataset": "이름·accession·chemistry", "datasetUrl": "", "fastqUrl": "", "size": "", "note": "" },\n' +
+  '  "steps": [ { "id": "짧은id", "title": "English step title", "ko": "한국어 설명", "kind": "task", "run": "bash NN_name.sh", "presentPath": "선택: 존재하면 완료로 표시할 파일", "produces": ["선택: results 기준 상대경로"] } ],\n' +
+  '  "ai": { "system": "English system prompt describing the biology", "readyHint": "한국어", "context": [ {"file":"x.csv","heading":"한국어 제목"} ], "prompts": [ {"key":"","label":"버튼 라벨","q":"한국어 질문"} ], "easyReport": {"label":"🎓 고등학생 버전 보고서","makeReport":"05_make_easy_report.sh","title":"# ...","datasetLabel":"...","paperClaim":"원 논문의 핵심 결론"} },\n' +
+  '  "help": { "intro": "HTML 허용 한국어 소개", "steps": {"stepId":"한국어 설명"}, "glossary": [ {"term":"","def":"HTML 허용"} ] }\n' +
+  "}\n" +
+  "Rules: order steps top→bottom (환경설치 → 다운로드 → STAR 색인/정렬 → 분석 → ai → 리포트). Each task step runs a script " +
+  "named `NN_name.sh` (two-digit prefix) or a python file `NN_name.py`. EXACTLY ONE step has kind:\"ai\" (no run). The final " +
+  "step builds a PDF (bash 05_make_report.sh, produces a .pdf). Target hardware: aarch64 (no Cell Ranger; STARsolo compiled " +
+  "from source), Python venv ~/ghbio-venv. Base ai.context filenames on the CSVs the analyze step will produce. Use Korean for " +
+  "the fields the schema marks 한국어. Output ONLY the JSON object."
+
+const SCRIPT_SYSTEM =
+  "You write ONE file for a BioIDE scRNA-seq pipeline stage. Output RAW file contents ONLY — no code fence, no prose, no " +
+  "explanation before or after. Environment: aarch64 Linux, NO Cell Ranger, STARsolo compiled from source at ~/bin/STAR, a " +
+  "Python venv at ~/ghbio-venv (call ~/ghbio-venv/bin/python). CRITICAL: the script MUST write all outputs into the directory " +
+  'given by env var $GHBIO_RESULTS (fallback: "${HOME}/ghbio-tutorial/results"); never hardcode a project path. Make it ' +
+  "idempotent (safe to re-run — skip work already done). For any download use `flock` to avoid duplicate runs and " +
+  "`curl -C - --retry 5 --speed-limit 1024 --speed-time 60` so a stalled connection times out instead of hanging. Heavy shared " +
+  "inputs (FASTQ, GRCh38 index) live under ~/ghbio-tutorial and are reused. Where you must GUESS a URL, accession, parameter, or " +
+  "command the plan does not pin down, write your best guess AND add a `# TODO: 확인 필요` comment on that line. Start .sh files " +
+  "with `#!/usr/bin/env bash` and `set -euo pipefail`. Output ONLY the file body."
+
+const slug = (s: string): string =>
+  String(s)
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "pipeline"
+
+function manifestUser(plan: string): string {
+  return "다음은 재현 계획서(Markdown)입니다. 이를 BioIDE pipeline.json 매니페스트(순수 JSON)로 변환하세요.\n\n=== 계획서 ===\n" + plan
+}
+
+function scriptUser(plan: string, manifest: any, step: any, fn: string): string {
+  return (
+    `아래 계획서와 pipeline.json 매니페스트를 참고하여, '${fn}' 파일의 내용을 작성하세요.\n` +
+    `이 파일은 단계 [${step.id}] "${step.title}"${step.ko ? ` (${step.ko})` : ""} 를 실행합니다. run: ${step.run}\n` +
+    (step.produces ? `이 단계는 다음 산출물을 만들어야 합니다(GHBIO_RESULTS 기준 상대경로): ${JSON.stringify(step.produces)}\n` : "") +
+    `\n=== pipeline.json ===\n${JSON.stringify(manifest).slice(0, 4000)}\n\n=== 계획서 ===\n${plan}`
+  )
+}
+
+// Extract the first balanced {...} object text and parse it (models sometimes wrap JSON in prose/fences).
+function extractJson(s: string): any {
+  const a = s.indexOf("{")
+  const b = s.lastIndexOf("}")
+  if (a < 0 || b <= a) throw new Error("모델이 JSON 매니페스트를 반환하지 않았습니다.")
+  return JSON.parse(s.slice(a, b + 1))
+}
+
+// Strip a single surrounding ```lang ... ``` fence if the model added one despite instructions.
+function stripFence(s: string): string {
+  const t = s.trim()
+  const m = /^```[a-zA-Z]*\s*\n([\s\S]*?)\n```$/.exec(t)
+  return (m ? m[1] : t).trim() + "\n"
+}
+
+// The script filename a task step runs, e.g. "bash 01_download.sh" → "01_download.sh",
+// "~/ghbio-venv/bin/python 03_analyze.py" → "03_analyze.py". undefined if none.
+function scriptFileOf(run?: string): string | undefined {
+  if (!run) return undefined
+  const m = /([\w.\-/]+\.(?:sh|py))(?:\s|$)/.exec(run)
+  return m ? m[1].replace(/^.*\//, "") : undefined
+}
+
+function scaffoldReadme(manifest: any, id: string, files: string[]): string {
+  const list = files.map((f) => "`" + f + "`").join(", ")
+  return (
+    `# ${manifest.name || id} — 스캐폴드 초안 (검토용)\n\n` +
+    `이 폴더는 **"파이프라인 만들기"** 카드가 초안 계획서(.md)로부터 AI로 자동 생성한 **검토용 스캐폴드**입니다. ` +
+    `아직 실제 튜토리얼이 아니며, 검토·수정 후 \`modules/\`로 **승격(promote)** 해야 합니다.\n\n` +
+    `- 스테이징 위치: \`pipeline-drafts/${id}/\`\n` +
+    `- 생성 파일: ${list}\n\n` +
+    `## ⚠ 반드시 검토하세요\n` +
+    `AI가 생성한 스크립트에는 **추측한 URL·accession·파라미터**가 들어 있을 수 있습니다. 각 파일에서 ` +
+    `\`# TODO: 확인 필요\` 주석을 찾아 데이터 접근번호와 명령을 검증하세요. 스크립트는 \`$GHBIO_RESULTS\`에 결과를 씁니다.\n\n` +
+    `## 실제 튜토리얼로 승격(promote)\n` +
+    "```bash\n" +
+    `cp -r ~/ghbio-workspace/pipeline-drafts/${id} ~/ghbio-coscientist/modules/scrna-seq/pipelines/${id}\n` +
+    `# package.json 의 version 을 올린 뒤\n` +
+    `cd ~/ghbio-coscientist && bash build.sh\n` +
+    "```\n\n" +
+    `그런 다음 브라우저 탭을 **Ctrl+Shift+R** 로 새로고침하면 새 튜토리얼 카드가 GHBIO Home 에 나타납니다.\n`
+  )
+}
+
+interface DraftInfo {
+  file: string
+  name: string
+  mtime: number
+}
+function listDrafts(): DraftInfo[] {
+  const dir = pipelineDraftsDir()
+  try {
+    return fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => ({ file: f, name: f.replace(/_plan\.md$/, "").replace(/\.md$/, ""), mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime)
+  } catch {
+    return []
+  }
+}
+
+// Orchestrate the multi-file scaffold. Streams per-file progress to the panel; obeys the shared
+// AbortController so the Stop button cancels it. Writes into pipeline-drafts/<id>/ (staging).
+async function runScaffold(
+  panel: vscode.WebviewPanel,
+  providers: ReturnType<typeof loadProviders>,
+  msg: any,
+): Promise<void> {
+  const apiKey = providers[msg.provider]?.apiKey
+  if (!apiKey) {
+    panel.webview.postMessage({ type: "scaffoldError", msg: `${msg.provider} API key가 설정되지 않았습니다.` })
+    return
+  }
+  const draftsRoot = pipelineDraftsDir()
+  const planPath = path.join(draftsRoot, path.basename(String(msg.file)))
+  let plan = ""
+  try {
+    plan = fs.readFileSync(planPath, "utf8")
+  } catch {
+    panel.webview.postMessage({ type: "scaffoldError", msg: "초안 파일을 읽을 수 없습니다." })
+    return
+  }
+
+  controller?.abort()
+  controller = new AbortController()
+  const signal = controller.signal
+  const common = { provider: msg.provider, model: msg.model, apiKey, signal }
+  panel.webview.postMessage({ type: "scaffoldStart" })
+  try {
+    // 1) Manifest (pipeline.json)
+    panel.webview.postMessage({ type: "scaffoldProgress", file: "pipeline.json", msg: "매니페스트(pipeline.json) 생성 중…" })
+    let manifestRaw = ""
+    await streamChat({
+      ...common,
+      system: withMission(MANIFEST_SYSTEM),
+      user: manifestUser(plan),
+      maxTokens: 8000,
+      onDelta: (t) => {
+        if (!t) return
+        manifestRaw += t
+        panel.webview.postMessage({ type: "scaffoldDelta", text: t })
+      },
+    })
+    const manifest = extractJson(manifestRaw)
+    const id = slug(manifest.id || manifest.name || "pipeline")
+    manifest.id = id
+    const outDir = path.join(draftsRoot, id)
+    fs.mkdirSync(outDir, { recursive: true })
+    fs.writeFileSync(path.join(outDir, "pipeline.json"), JSON.stringify(manifest, null, 2) + "\n", "utf8")
+    const written = ["pipeline.json"]
+    panel.webview.postMessage({ type: "scaffoldFile", file: "pipeline.json" })
+
+    // 2) One script per task step (capped so a malformed manifest can't fan out forever).
+    const steps: any[] = Array.isArray(manifest.steps) ? manifest.steps : manifest.stages ?? []
+    const scripts: { fn: string; st: any }[] = []
+    for (const st of steps) {
+      if (st?.kind !== "task") continue
+      const fn = scriptFileOf(st.run)
+      if (fn && !scripts.some((s) => s.fn === fn)) scripts.push({ fn, st })
+    }
+    // Backstop against a malformed manifest fanning out forever — but high enough that a real
+    // multi-stage pipeline (env→download→align→QC→norm→latent→cluster→CNV→programs→overlap→stats→report)
+    // is generated in full rather than silently truncated.
+    const MAX = 24
+    const n = Math.min(scripts.length, MAX)
+    for (let i = 0; i < n; i++) {
+      if (signal.aborted) break
+      const { fn, st } = scripts[i]
+      panel.webview.postMessage({ type: "scaffoldProgress", file: fn, msg: `스크립트 생성 중 (${i + 1}/${n}): ${fn}` })
+      let body = ""
+      await streamChat({
+        ...common,
+        system: withMission(SCRIPT_SYSTEM),
+        user: scriptUser(plan, manifest, st, fn),
+        maxTokens: 6000,
+        onDelta: (t) => {
+          if (!t) return
+          body += t
+          panel.webview.postMessage({ type: "scaffoldDelta", text: t })
+        },
+      })
+      if (signal.aborted) break
+      fs.writeFileSync(path.join(outDir, fn), stripFence(body), "utf8")
+      written.push(fn)
+      panel.webview.postMessage({ type: "scaffoldFile", file: fn })
+    }
+    if (scripts.length > MAX) written.push(`… (+${scripts.length - MAX}개 스크립트 생략됨)`)
+
+    fs.writeFileSync(path.join(outDir, "README.md"), scaffoldReadme(manifest, id, written), "utf8")
+    written.push("README.md")
+    panel.webview.postMessage({ type: "scaffoldDone", dir: outDir, id, files: written })
+    vscode.commands.executeCommand("revealInExplorer", vscode.Uri.file(path.join(outDir, "pipeline.json")))
+    vscode.commands.executeCommand("vscode.open", vscode.Uri.file(path.join(outDir, "pipeline.json")))
+  } catch (e: any) {
+    if (e?.name === "AbortError") panel.webview.postMessage({ type: "scaffoldDone", aborted: true })
+    else panel.webview.postMessage({ type: "scaffoldError", msg: String(e?.message ?? e) })
+  }
+}
+
 let panel: vscode.WebviewPanel | undefined
 let controller: AbortController | undefined
 
@@ -135,7 +356,15 @@ export function openCreatePipeline(context: vscode.ExtensionContext) {
   })
 
   const providers = loadProviders()
-  const available = Object.keys(providers).filter((p) => providers[p]?.apiKey)
+  // Default the dropdown to Groq (free/fast) rather than Anthropic — the Anthropic
+  // key often has no credit balance, and web search (Anthropic-only) isn't required here.
+  const PROVIDER_PREF = ["groq", "deepseek", "openrouter", "anthropic"]
+  const available = Object.keys(providers)
+    .filter((p) => providers[p]?.apiKey)
+    .sort((a, b) => {
+      const ia = PROVIDER_PREF.indexOf(a), ib = PROVIDER_PREF.indexOf(b)
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+    })
   const modelMap: Record<string, string[]> = {}
   for (const p of available) modelMap[p] = providers[p].models?.length ? providers[p].models! : DEFAULT_MODELS[p] ?? []
 
@@ -152,21 +381,46 @@ export function openCreatePipeline(context: vscode.ExtensionContext) {
 
     if (msg?.type === "savePlan") {
       try {
-        const dir = path.join(os.homedir(), "ghbio-workspace", "pipeline-drafts")
+        const dir = pipelineDraftsDir()
         fs.mkdirSync(dir, { recursive: true })
-        const slug =
-          String(msg.title || "pipeline")
-            .toLowerCase()
-            .replace(/[^a-z0-9가-힣]+/g, "-")
-            .replace(/^-+|-+$/g, "")
-            .slice(0, 60) || "pipeline"
-        const out = path.join(dir, `${slug}_plan.md`)
+        const out = path.join(dir, `${slug(String(msg.title || "pipeline"))}_plan.md`)
         fs.writeFileSync(out, String(msg.text ?? ""), "utf8")
         thePanel.webview.postMessage({ type: "planSaved", file: out })
         vscode.commands.executeCommand("vscode.open", vscode.Uri.file(out))
+        // Also reveal it in the folder view so the user can see where drafts land.
+        vscode.commands.executeCommand("revealInExplorer", vscode.Uri.file(out))
       } catch (e: any) {
         thePanel.webview.postMessage({ type: "saveError", msg: String(e?.message ?? e) })
       }
+      return
+    }
+
+    // ---- Drafts list / edit / scaffold ------------------------------------
+    if (msg?.type === "listDrafts") {
+      thePanel.webview.postMessage({ type: "drafts", list: listDrafts() })
+      return
+    }
+    if (msg?.type === "openDraft") {
+      try {
+        const p = path.join(pipelineDraftsDir(), path.basename(String(msg.file)))
+        thePanel.webview.postMessage({ type: "draftContent", file: path.basename(p), text: fs.readFileSync(p, "utf8") })
+      } catch (e: any) {
+        thePanel.webview.postMessage({ type: "saveError", msg: String(e?.message ?? e) })
+      }
+      return
+    }
+    if (msg?.type === "saveDraft") {
+      try {
+        const p = path.join(pipelineDraftsDir(), path.basename(String(msg.file)))
+        fs.writeFileSync(p, String(msg.text ?? ""), "utf8")
+        thePanel.webview.postMessage({ type: "draftSaved", file: path.basename(p) })
+      } catch (e: any) {
+        thePanel.webview.postMessage({ type: "saveError", msg: String(e?.message ?? e) })
+      }
+      return
+    }
+    if (msg?.type === "scaffold") {
+      await runScaffold(thePanel, providers, msg)
       return
     }
 
@@ -195,7 +449,7 @@ export function openCreatePipeline(context: vscode.ExtensionContext) {
           model: msg.model,
           apiKey,
           webSearch: !!msg.webSearch,
-          system: isSearch ? SEARCH_SYSTEM : DESIGN_SYSTEM,
+          system: withMission(isSearch ? SEARCH_SYSTEM : DESIGN_SYSTEM),
           user,
           signal,
           maxTokens: isSearch ? 5000 : 9000,
@@ -329,15 +583,67 @@ const UI_SCRIPT = String.raw`
     else if(m.type==='designDelta'){ planRaw+=m.text; $('planOut').innerHTML=md(planRaw) }
     else if(m.type==='designDone'){ $('stop').style.display='none'; if(m.aborted) $('planOut').innerHTML+='<p><i>(중지됨)</i></p>'; if(planRaw.trim()) $('savePlan').style.display='inline-block' }
     else if(m.type==='error'){ $('stop').style.display='none'; var box=(m.phase==='design')?$('planOut'):$('searchOut'); if(box) box.innerHTML='<div class="warn">'+esc(m.msg)+'</div>' }
-    else if(m.type==='planSaved'){ $('planMsg').textContent='저장됨: '+m.file }
-    else if(m.type==='saveError'){ $('planMsg').textContent=m.msg }
+    else if(m.type==='planSaved'){ $('planMsg').textContent='저장됨: '+m.file; reqDrafts() }
+    else if(m.type==='saveError'){ $('planMsg').textContent=m.msg; if($('draftMsg')) $('draftMsg').textContent=m.msg }
+    else if(m.type==='drafts'){ renderDrafts(m.list) }
+    else if(m.type==='draftContent'){ showDraft(m.file, m.text) }
+    else if(m.type==='draftSaved'){ if($('draftMsg')) $('draftMsg').textContent='저장됨: '+m.file; reqDrafts() }
+    else if(m.type==='scaffoldStart'){ scaffRaw=''; if($('scaffoldWrap')){ $('scaffoldWrap').style.display='block'; $('scaffoldWrap').open=true } if($('scaffoldFiles')) $('scaffoldFiles').innerHTML=''; if($('scaffoldOut')) $('scaffoldOut').textContent='매니페스트 생성 준비 중…'; if($('draftMsg')) $('draftMsg').textContent='🏗 튜토리얼 생성 중…'; if($('stop')) $('stop').style.display='inline-block' }
+    else if(m.type==='scaffoldProgress'){ scaffRaw=''; addScaffFile(m.file,'run'); if($('scaffoldOut')) $('scaffoldOut').textContent=m.msg||'' }
+    else if(m.type==='scaffoldDelta'){ scaffRaw+=m.text; var so=$('scaffoldOut'); if(so) so.textContent=scaffRaw.slice(-3000) }
+    else if(m.type==='scaffoldFile'){ addScaffFile(m.file,'done') }
+    else if(m.type==='scaffoldDone'){ if($('stop')) $('stop').style.display='none'
+      if(m.aborted){ if($('draftMsg')) $('draftMsg').textContent='중지됨' }
+      else if($('draftMsg')) $('draftMsg').textContent='✅ 완료: pipeline-drafts/'+m.id+'/  ('+((m.files||[]).length)+'개 파일) — 검토 후 modules/ 로 승격하세요 (README 참고)'
+      reqDrafts() }
+    else if(m.type==='scaffoldError'){ if($('stop')) $('stop').style.display='none'; if($('draftMsg')) $('draftMsg').textContent='오류: '+m.msg }
   })
+
+  // ---- Drafts (이전 작업 이어가기) --------------------------------------------
+  var curDraft=null, scaffRaw=''
+  function reqDrafts(){ post({type:'listDrafts'}) }
+  function renderDrafts(list){
+    var box=$('draftsList'); if(!box) return
+    if(!list||!list.length){ box.innerHTML='<div class="muted">저장된 초안이 없습니다. 아래에서 논문을 찾아 설계한 뒤 <b>계획 저장(.md)</b>을 누르면 여기에 나타납니다.</div>'; return }
+    box.innerHTML=list.map(function(d){ return '<div class="draftitem" data-f="'+esc(d.file)+'"><span class="di-name">📄 '+esc(d.name)+'</span><span class="di-file">'+esc(d.file)+'</span></div>' }).join('')
+    var its=box.querySelectorAll('.draftitem')
+    for(var i=0;i<its.length;i++){ its[i].addEventListener('click', function(e){ post({type:'openDraft', file:e.currentTarget.dataset.f}) }) }
+  }
+  function renderDraftPreview(){ var p=$('draftPreview'); if(p) p.innerHTML=md($('draftText').value) }
+  function showDraft(file, text){
+    curDraft=file
+    $('draftEditor').style.display='block'
+    $('draftName').textContent=file
+    $('draftText').value=text
+    if($('draftMsg')) $('draftMsg').textContent=''
+    if($('scaffoldWrap')){ $('scaffoldWrap').style.display='none' }
+    if($('scaffoldFiles')) $('scaffoldFiles').innerHTML=''
+    renderDraftPreview()
+    $('draftEditor').scrollIntoView({behavior:'smooth'})
+  }
+  function addScaffFile(file, state){ var box=$('scaffoldFiles'); if(!box) return
+    var id='sf_'+String(file).replace(/[^a-zA-Z0-9]/g,'_')
+    var el=document.getElementById(id)
+    if(!el){ el=document.createElement('span'); el.id=id; el.className='sfile'; box.appendChild(el) }
+    el.textContent=(state==='done'?'✅ ':'⏳ ')+file
+    el.className='sfile '+(state==='done'?'sf-done':'sf-run')
+  }
 
   if($('prov')){ $('prov').onchange=fillModels; fillModels() }
   if($('ws')){ $('ws').addEventListener('change', function(){ $('ws').dataset.touched='1' }) }
   if($('search')) $('search').onclick=startSearch
   if($('stop')) $('stop').onclick=function(){ post({type:'stop'}) }
   if($('savePlan')) $('savePlan').onclick=function(){ if(planRaw.trim()) post({type:'savePlan', text:planRaw, title:planTitle}) }
+  if($('draftText')) $('draftText').addEventListener('input', renderDraftPreview)
+  if($('saveDraft')) $('saveDraft').onclick=function(){ if(curDraft) post({type:'saveDraft', file:curDraft, text:$('draftText').value}) }
+  if($('closeDraft')) $('closeDraft').onclick=function(){ $('draftEditor').style.display='none'; curDraft=null }
+  if($('scaffoldBtn')) $('scaffoldBtn').onclick=function(){
+    if(!curDraft) return
+    if(!$('prov')){ if($('draftMsg')) $('draftMsg').textContent='API 키가 필요합니다. providers.json 을 확인하세요.'; return }
+    if($('draftText').value.trim()) post({type:'saveDraft', file:curDraft, text:$('draftText').value})
+    post({type:'scaffold', file:curDraft, provider:$('prov').value, model:$('model').value })
+  }
+  reqDrafts()
 `
 
 function html(providers: string[], modelMap: Record<string, string[]>): string {
@@ -383,10 +689,58 @@ function html(providers: string[], modelMap: Record<string, string[]>): string {
   #planMsg{font-size:12px;color:#2dd4bf;margin-left:10px}
   .warn{background:#3a2a12;border:1px solid #7a5a1e;color:#f0d090;padding:10px;border-radius:8px;font-size:13px}
   .muted{color:#6e7b8a;font-size:12.5px}
+  /* Drafts (이전 작업 이어가기) */
+  .drafts{display:flex;flex-direction:column;gap:6px;max-width:820px}
+  .draftitem{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#12181f;border:1px solid #253039;border-left:3px solid #f0b458;border-radius:9px;padding:9px 12px;cursor:pointer}
+  .draftitem:hover{border-color:#2dd4bf}
+  .di-name{font-size:13.5px;font-weight:600;color:#e6edf3}
+  .di-file{font-size:11px;color:#6e7b8a}
+  #draftEditor{display:none;margin:10px 0 4px;max-width:1000px}
+  .dehead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  #draftName{color:#f0b458;font-size:13.5px}
+  #draftText{width:100%;min-height:220px;background:#0b0f14;color:#cfe6df;border:1px solid #30363d;border-radius:8px;padding:10px 12px;font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;font-size:12.5px;line-height:1.55;resize:vertical}
+  .ghostbtn{background:#21262d;color:#e6edf3;border:1px solid #30363d}
+  .ghostbtn:hover{border-color:#2dd4bf}
+  #scaffoldBtn{background:linear-gradient(135deg,#f0932b,#eb4d4b);color:#1a0e05}
+  #draftMsg{font-size:12px;color:#2dd4bf}
+  #scaffoldFiles{display:flex;flex-wrap:wrap;gap:6px;padding:6px 10px}
+  .sfile{font-size:11.5px;padding:2px 8px;border-radius:12px;border:1px solid #30363d}
+  .sfile.sf-run{background:#2a2410;color:#f0d090;border-color:#7a5a1e}
+  .sfile.sf-done{background:#12312b;color:#7ee7d6;border-color:#1f5a4f}
+  #scaffoldOut{white-space:pre-wrap;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:#8b98a5;padding:6px 10px;max-height:180px;overflow:auto}
+  #draftPreview{margin-top:10px}
+  .mission{margin:14px 0 18px;border:1px solid #3b2f6e;border-left:4px solid #7c3aed;border-radius:10px;background:linear-gradient(135deg,#161029,#0f1626);padding:12px 16px}
+  .mission-h{font-weight:700;font-size:14px;color:#c4b5fd}
+  .mission-h span{font-weight:400;font-size:11.5px;color:#8b98a5}
+  .mission-lead{margin:6px 0 8px;font-size:12.5px;color:#cbd5e1}
+  .mission-list{margin:0;padding-left:20px;font-size:12px;color:#aeb9c6;line-height:1.55}
+  .mission-list li{margin:4px 0}
+  .mission-list b{color:#ddd6fe}
 </style></head><body>
   <h2>파이프라인 <span class="a">만들기</span> · 논문 → 재현 튜토리얼</h2>
   <div class="sub">암 연구에서 <b>scRNA-seq로 의미 있는 발견</b>을 한 논문을 AI가 찾아 줍니다. 조건: <b>원본 데이터가 공개</b>되어 있을 것(필수), 가능하면 <b>소스코드도 공개</b>. 
   마음에 드는 논문에서 <b>design pipeline</b>을 누르면, 그 워크플로를 <b>최신 AI·GPU·Python(R 대신)</b>으로 재현하고 <b>다른 독립적 데이터 처리로 결론을 검증</b>하는 튜토리얼 계획을 만들어 접이식 상자에 보여줍니다.</div>
+
+  ${missionHtml()}
+
+  <h3 class="sec">📁 저장된 초안 (이전 작업 이어가기)</h3>
+  <div id="draftsList" class="drafts"><div class="muted">불러오는 중…</div></div>
+  <div id="draftEditor">
+    <div class="dehead">
+      <b id="draftName"></b>
+      <button id="saveDraft" class="ghostbtn">💾 초안 저장</button>
+      <button id="scaffoldBtn" title="이 초안(계획서)으로부터 pipeline.json + 단계별 스크립트를 AI가 생성해 pipeline-drafts/&lt;id&gt;/ 에 만듭니다 (검토 후 modules/ 로 승격)">🛠 이 초안으로 튜토리얼 만들기 (Proceed)</button>
+      <button id="closeDraft" class="ghostbtn">✕ 닫기</button>
+      <span id="draftMsg"></span>
+    </div>
+    <textarea id="draftText" spellcheck="false"></textarea>
+    <details id="scaffoldWrap" style="display:none">
+      <summary>🏗 생성 로그 (파일별)</summary>
+      <div id="scaffoldFiles"></div>
+      <div id="scaffoldOut"></div>
+    </details>
+    <div id="draftPreview" class="box"></div>
+  </div>
   ${
     noKeys
       ? `<div class="warn">API 키가 설정되지 않았습니다. <code>~/.config/ghbio/providers.json</code> 를 확인하세요.</div>`

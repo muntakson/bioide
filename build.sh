@@ -32,10 +32,12 @@ cat > .vsix-build/extension.vsixmanifest <<XML
 <Dependencies/><Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/></Assets>
 </PackageManifest>
 XML
+# zip APPENDS to an existing archive — stale/deleted files would linger. Start fresh.
+rm -f ghbio-coscientist.vsix
 (cd .vsix-build && zip -r -q ../ghbio-coscientist.vsix "[Content_Types].xml" extension.vsixmanifest extension)
 rm -rf .vsix-build
 
 echo "==> install into code-server + restart"
 "$HOME/.local/bin/code-server" --install-extension "$PWD/ghbio-coscientist.vsix" --force
 systemctl --user restart ghbio-code
-echo "==> done. Reload the browser tab at https://ghbiocosci.iotok.org"
+echo "==> done. Reload the browser tab at https://rna.bioide.org"

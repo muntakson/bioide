@@ -1,9 +1,11 @@
 import * as vscode from "vscode"
+import * as fs from "fs"
 import * as path from "path"
 import { TutorialProvider, runStep, runStepById } from "./tutorials"
 import { ProjectProvider, newProject, openProject } from "./projects"
 import { LibraryProvider, installLibrary } from "./libraries"
 import { openHome } from "./home"
+import { openLanding } from "./landing"
 import { openHelp } from "./help"
 import { openDashboard, refreshDashboard, DashboardTarget } from "./dashboard"
 import { openAI } from "./ai/panel"
@@ -13,10 +15,12 @@ import { TerminalViewProvider } from "./terminal"
 import { registerWorkTerminal, showWorkFolder } from "./workterminal"
 import { openDatasetCatalog } from "./catalog"
 import { openCreatePipeline } from "./createPipeline"
+import { openCodelab } from "./codelab"
 import { openAtlas } from "./atlas"
 import { runPipeline } from "./pipeline"
 import { loadModules, findPipeline, defaultPipeline } from "./modules"
-import { confirmRun, cfg, tutorialProjectDir, projectsDir } from "./util"
+import { confirmRun, cfg, tutorialProjectDir, projectsDir, pipelineDraftsDir } from "./util"
+import { resetExplorerToWorkspaceRoot, revealInExplorerNoReload, consumePendingReveal } from "./explorer"
 
 // globalState key: the project folder to reopen a dashboard for after a "open folder" reload.
 const RETURN_TO_DASHBOARD_KEY = "ghbio.returnToDashboard"
@@ -107,10 +111,27 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand("ghbio.restartTerminal", () => terminal.restart()),
 
-    vscode.commands.registerCommand("ghbio.openHome", () => openHome(context, tutorials)),
+    vscode.commands.registerCommand("ghbio.openHome", async () => {
+      // Clicking Home resets the folder view to ~/ghbio-workspace (the last opened project may
+      // have narrowed it). If a re-root is needed this reloads the workbench and activate()
+      // reopens Home; otherwise openHome renders now.
+      await resetExplorerToWorkspaceRoot(context)
+      openHome(context, tutorials)
+    }),
+    vscode.commands.registerCommand("ghbio.openLanding", () => openLanding(context, tutorials)),
     vscode.commands.registerCommand("ghbio.openDatasetCatalog", () => openDatasetCatalog()),
-    vscode.commands.registerCommand("ghbio.openCreatePipeline", () => openCreatePipeline(context)),
+    vscode.commands.registerCommand("ghbio.openCreatePipeline", () => {
+      openCreatePipeline(context)
+      // Point the folder view at pipeline-drafts/ so the AI-drafted *_plan.md is easy to find.
+      // No reload (would destroy the just-opened panel) — best-effort reveal within the current root.
+      revealInExplorerNoReload(pipelineDraftsDir())
+    }),
     vscode.commands.registerCommand("ghbio.openAtlas", (key?: string) => openAtlas(context, key)),
+    vscode.commands.registerCommand("ghbio.openCodelab", (arg) => {
+      const id = typeof arg === "string" ? arg : undefined
+      if (id) setActive(id)
+      openCodelab(context, id ?? activePipelineId)
+    }),
     vscode.commands.registerCommand("ghbio.openHelp", () => openHelp(context, activePipelineId)),
     vscode.commands.registerCommand("ghbio.openAI", () => openAI(context)),
     vscode.commands.registerCommand("ghbio.openSurvey", (arg) => {
@@ -140,7 +161,19 @@ export function activate(context: vscode.ExtensionContext) {
       openDashboard(context, target)
       // Follow the selected pipeline/project into its work folder — in the PANEL work terminal
       // (the side-bar SSH terminal stays put on the codebase).
-      showWorkFolder(projectDirOf(target))
+      const dir = projectDirOf(target)
+      showWorkFolder(dir)
+      // Point the folder view at this project's results/ folder (where its outputs land). Best-effort,
+      // no reload; reveals only when the workspace root contains it (the ~/ghbio-workspace default).
+      if (dir) {
+        const results = path.join(dir, "results")
+        try {
+          fs.mkdirSync(results, { recursive: true })
+        } catch {
+          /* pipeline may not have run yet — reveal falls back to a no-op */
+        }
+        revealInExplorerNoReload(results)
+      }
     }),
     vscode.commands.registerCommand("ghbio.openResult", (p?: string) => {
       if (p) vscode.commands.executeCommand("vscode.open", vscode.Uri.file(p))
@@ -199,6 +232,9 @@ export function activate(context: vscode.ExtensionContext) {
   // If we just reloaded because the user clicked "프로젝트 폴더 열기", return them to THAT project's
   // dashboard (not Home). We stored the folder before reloading; resolve it back to a dashboard
   // target — a known pipeline id → its tutorial dashboard, otherwise a plain project view.
+  // Finish any Explorer reveal that was deferred across a folder-reload (e.g. Home re-rooting).
+  consumePendingReveal(context)
+
   const returnDir = context.globalState.get<string>(RETURN_TO_DASHBOARD_KEY)
   if (returnDir) {
     context.globalState.update(RETURN_TO_DASHBOARD_KEY, undefined)
@@ -209,8 +245,10 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.commands.executeCommand("ghbio.openDashboard", target)
     }, 400)
   } else if (cfg<boolean>("openHomeOnStartup", true)) {
-    // Like PlatformIO Home: greet with the dashboard landing on startup (opt-out via
-    // ghbio.openHomeOnStartup) so novices see the tutorial/project overview first.
+    // The public BioIDE landing page is served at the bare URL by the nginx front proxy
+    // (see RUN.md) BEFORE code-server login, so once we're inside the authenticated workbench
+    // we go straight to Home. The in-IDE landing (ghbio.openLanding) remains available from the
+    // command palette but is not auto-opened, to avoid showing a second landing after sign-in.
     setTimeout(() => vscode.commands.executeCommand("ghbio.openHome"), 400)
   }
 

@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import { runShellTask, confirmRun } from "./util"
+import { runShellTask, confirmRun, stepLogTee } from "./util"
 import { Module, loadModules } from "./modules"
 import { Pipeline, Stage, ensureProject, stageComplete } from "./pipeline"
 
@@ -145,6 +145,9 @@ export async function runStep(node: Node, openAI: (pipelineId: string) => void) 
     `if [ "$__rc" -eq 0 ]; then printf "\\033[1;32m✅ 완료: %s\\033[0m\\n" "${title}"; ` +
     `else printf "\\033[1;31m⚠ 오류(exit %s): %s\\033[0m\\n" "$__rc" "${title}"; fi; ` +
     `echo "→ 다음 단계는 왼쪽 GHBIO → Pipelines 에서 이어서 누르세요."; echo "";`
-  const full = `${header} { ${s.run}; }; ${footer}`
+  // Tee the whole step (banner + command + result banner) to a per-step log the
+  // Dashboard's collapsible debug console tails. The footer already captured the
+  // command's exit in $__rc before this redirect, so behavior is unchanged.
+  const full = `{ ${header} { ${s.run}; }; ${footer} } ${stepLogTee(s.id)}`
   await runShellTask(`GHBIO: ${title}`, full, p.dir, { GHBIO_RESULTS: resultsDir })
 }
