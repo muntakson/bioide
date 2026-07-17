@@ -16,6 +16,56 @@
     }
   },
   "deepModule": true,
+  "figures": [
+    {
+      "file": "umap_clusters.png",
+      "title": "Figure 1. UMAP — Leiden 클러스터",
+      "easy": "세포 하나하나를 2차원 지도에 점으로 찍고, <b>발현이 비슷한 세포끼리 무리(클러스터)</b>로 묶어 색칠한 그림입니다.",
+      "detailed": "폐선암 세포들을 GPU로 정규화·PCA·Harmony(시료 배치 보정)·Leiden 클러스터링한 뒤 UMAP으로 압축한 임베딩입니다. 점=세포, 색=클러스터. 각 무리에 다음 단계에서 마커로 세포유형 이름을 붙입니다."
+    },
+    {
+      "file": "umap_celltypes.png",
+      "title": "Figure 2. 세포유형 UMAP (마커 기반 주석)",
+      "easy": "각 무리에 <b>대표 유전자(마커)</b>로 세포유형(T/NK·B·골수성·섬유아세포·내피 등) 이름을 붙인 지도입니다.",
+      "detailed": "저자 라벨을 쓰지 않고 우리 코드가 마커 발현으로 각 클러스터에 세포유형을 배정한 결과입니다(BioIDE 헌장). 폐선암의 종양 미세환경 구성을 한눈에 보여줍니다."
+    },
+    {
+      "file": "umap_malignant.png",
+      "title": "Figure 3. 악성세포 판정 UMAP",
+      "easy": "어느 세포가 <b>악성 상피세포</b>이고 어느 것이 정상인지 비지도 방법으로 스스로 판정한 지도입니다.",
+      "detailed": "저자 악성 라벨 없이, 악성 서명 점수 분포를 가우시안 혼합 모형(GMM)으로 나눠 악성 상피세포를 정상세포와 분리했습니다. 두 독립 경로(우리 vs 저자)의 수렴을 검증 단계에서 확인합니다."
+    },
+    {
+      "file": "umap_origin.png",
+      "title": "Figure 4. 조직 기원별 UMAP",
+      "easy": "각 세포가 <b>어느 조직</b>(정상 폐·원발 종양·전이 림프절·뇌 전이)에서 왔는지 색으로 보여줍니다.",
+      "detailed": "조직 기원(정상 폐→원발 종양→전이 림프절→뇌 전이)에 따라 악성세포와 면역세포 구성이 단계적으로 바뀌는 양상을 봅니다. 기원은 세포 라벨이 아닌 시료 정보입니다."
+    },
+    {
+      "file": "composition.png",
+      "title": "Figure 5. 세포유형 조성",
+      "easy": "조직/시료마다 <b>어떤 세포가 얼마나 많은지</b>를 막대로 나타낸 그림입니다.",
+      "detailed": "폐선암의 조직 부위·시료별 세포유형 비율입니다. 종양·전이 조직으로 갈수록 악성 상피세포가 늘고 면역·기질 구성이 재편되는지 봅니다."
+    },
+    {
+      "file": "confusion_celltype.png",
+      "title": "Figure 6. 저자 라벨 대비 혼동행렬",
+      "easy": "우리가 <b>스스로 붙인 세포유형</b>과 <b>저자가 공개한 라벨</b>이 얼마나 일치하는지 표로 비교한 그림입니다.",
+      "detailed": "행=우리 라벨, 열=저자 라벨. 대각선이 진할수록 두 독립 분석이 수렴한 것입니다(BioIDE 헌장 제2조). 저자 라벨은 이 검증 단계에서만 사용합니다."
+    },
+    {
+      "file": "progression_malignant.png",
+      "title": "Figure 7. 진행 축별 악성세포 비율",
+      "easy": "조직이 <b>정상 폐→원발 종양→전이 림프절→뇌 전이</b>로 갈수록 악성 상피세포가 얼마나 늘어나는지 보여주는 그림입니다.",
+      "detailed": "진행 축을 따라 악성 상피세포 비율을 집계했습니다. 종양·전이 조직에 악성세포가 편중된다는 원 논문 주장을 정량 검증합니다(저자 악성 라벨이 없어 부위 편중의 자기일관성으로 확인)."
+    },
+    {
+      "file": "validation_bars.png",
+      "title": "Figure 8. 독립 검증 지표",
+      "easy": "우리 재현 결과가 원 논문 결론과 <b>얼마나 맞는지</b>를 지표별 막대로 요약한 그림입니다.",
+      "detailed": "세포유형 일치도(ARI/NMI·정확도), 악성 상피세포 편중, 마커 회복 등 검증 지표를 한눈에 보여줍니다. 이 값들로 재현/부분재현/불일치를 판정합니다(validation_summary.csv 근거)."
+    }
+  ],
   "steps": [
     { "id": "setup", "title": "0. Setup GPU env (Scanpy·PyTorch·Harmony)", "ko": "GPU 분석 환경 설치 — 다른 예제와 공유", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
     { "id": "download", "title": "1. Download lung matrix (Kim 2020, GEO GSE131907)", "ko": "저자 공개 dense UMI 행렬(~390 MB) + 세포 주석 내려받기", "kind": "task", "run": "bash 01_download_lung.sh", "presentPath": "~/ghbio-tutorial/data/lung-kim2020/GSE131907_Lung_Cancer_raw_UMI_matrix.txt.gz" },

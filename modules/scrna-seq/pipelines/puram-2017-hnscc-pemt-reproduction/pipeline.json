@@ -10,6 +10,38 @@
     "size": "약 5,902 세포 × ~23,000 유전자 (log2(TPM/10+1) 행렬)",
     "note": "원시 FASTQ 미공개. 처리 완료 TPM 행렬(GSE103322_HNSCC_all_data.txt)에서 시작. 첫 단계에서 SRA raw 유무를 실제 확인 후 시작 경로 확정."
   },
+  "figures": [
+    {
+      "file": "umap.png",
+      "title": "Figure 1. UMAP — 세포 임베딩",
+      "easy": "세포를 2차원 지도에 찍어 <b>비슷한 세포끼리 모이게</b> 한 그림입니다.",
+      "detailed": "두경부암(HNSCC)의 단일세포를 정규화·차원축소(scVI/PCA)한 UMAP 임베딩입니다. 점=세포이며, 가까울수록 발현이 비슷합니다."
+    },
+    {
+      "file": "cnv_heatmap.png",
+      "title": "Figure 2. 추론 CNV 히트맵 — 악성 vs 정상",
+      "easy": "유전자를 <b>염색체 위치 순서로 늘어놓고</b> 발현 이동평균을 낸 그림으로, 악성세포는 넓은 구간이 통째로 증폭/결실됩니다.",
+      "detailed": "발현으로부터 추론한 복제수 변이(inferCNV) 히트맵입니다. 행=세포, 열=유전체 위치. 큰 규모 이수성(aneuploidy)을 보이는 세포를 악성으로, 밋밋한 세포를 정상으로 구분합니다."
+    },
+    {
+      "file": "program_heatmap.png",
+      "title": "Figure 3. p-EMT 프로그램 히트맵",
+      "easy": "종양 가장자리 암세포가 켜는 <b>부분 상피-간엽 이행(p-EMT)</b> 유전자 프로그램을 보여줍니다.",
+      "detailed": "세포외기질 단백질은 켜지만 전형적 EMT 전사인자는 없는 p-EMT 프로그램(LAMC2·PDPN·ITGA5 등)의 세포별 발현입니다. Puram 2017은 이 프로그램이 림프절 전이·나쁜 예후를 예측한다고 보고했습니다."
+    },
+    {
+      "file": "confusion_celltype.png",
+      "title": "Figure 4. 저자 라벨 대비 혼동행렬",
+      "easy": "우리가 <b>스스로 붙인 세포유형</b>과 <b>저자가 공개한 라벨</b>이 얼마나 일치하는지 표로 비교한 그림입니다.",
+      "detailed": "행=우리 라벨, 열=저자 라벨. 대각선이 진할수록 두 독립 분석이 수렴한 것입니다(BioIDE 헌장 제2조). 저자 라벨은 이 검증 단계에서만 사용합니다."
+    },
+    {
+      "file": "validation_bars.png",
+      "title": "Figure 5. 독립 검증 지표",
+      "easy": "우리 재현 결과가 원 논문 결론과 <b>얼마나 맞는지</b>를 지표별 막대로 요약한 그림입니다.",
+      "detailed": "세포유형 일치도(ARI/NMI·정확도), 악성 상피세포 편중, 마커 회복 등 검증 지표를 한눈에 보여줍니다. 이 값들로 재현/부분재현/불일치를 판정합니다(validation_summary.csv 근거)."
+    }
+  ],
   "steps": [
     {
       "id": "env",

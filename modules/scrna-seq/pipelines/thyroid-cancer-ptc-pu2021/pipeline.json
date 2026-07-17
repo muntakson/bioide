@@ -16,6 +16,44 @@
     }
   },
   "deepModule": true,
+  "figures": [
+    {
+      "file": "umap_clusters.png",
+      "title": "Figure 1. UMAP — Leiden 클러스터",
+      "easy": "세포 하나하나를 2차원 지도에 점으로 찍고, <b>발현이 비슷한 세포끼리 무리(클러스터)</b>로 묶어 색칠한 그림입니다.",
+      "detailed": "갑상선유두암(PTC) 세포들을 GPU로 정규화·PCA·Harmony(시료 배치 보정)·Leiden 클러스터링한 뒤 UMAP으로 압축한 임베딩입니다. 점=세포, 색=클러스터. 각 무리에 다음 단계에서 마커로 세포유형 이름을 붙입니다."
+    },
+    {
+      "file": "umap_celltypes.png",
+      "title": "Figure 2. 세포유형 UMAP (마커 기반 주석)",
+      "easy": "각 무리에 <b>대표 유전자(마커)</b>로 세포유형(T/NK·B·골수성·섬유아세포·내피 등) 이름을 붙인 지도입니다.",
+      "detailed": "저자 라벨을 쓰지 않고 우리 코드가 마커 발현으로 각 클러스터에 세포유형을 배정한 결과입니다(BioIDE 헌장). 갑상선유두암(PTC)의 종양 미세환경 구성을 한눈에 보여줍니다."
+    },
+    {
+      "file": "umap_malignant.png",
+      "title": "Figure 3. 악성세포 판정 UMAP",
+      "easy": "어느 세포가 <b>악성 갑상선세포</b>이고 어느 것이 정상인지 비지도 방법으로 스스로 판정한 지도입니다.",
+      "detailed": "저자 악성 라벨 없이, 악성 서명 점수 분포를 가우시안 혼합 모형(GMM)으로 나눠 악성 갑상선세포를 정상세포와 분리했습니다. 두 독립 경로(우리 vs 저자)의 수렴을 검증 단계에서 확인합니다."
+    },
+    {
+      "file": "composition.png",
+      "title": "Figure 4. 세포유형 조성",
+      "easy": "조직/시료마다 <b>어떤 세포가 얼마나 많은지</b>를 막대로 나타낸 그림입니다.",
+      "detailed": "갑상선유두암(PTC)의 조직 부위·시료별 세포유형 비율입니다. 종양·전이 조직으로 갈수록 악성 갑상선세포가 늘고 면역·기질 구성이 재편되는지 봅니다."
+    },
+    {
+      "file": "marker_recovery.png",
+      "title": "Figure 5. 마커 회복 — 세포유형별 대표 유전자",
+      "easy": "우리가 붙인 각 세포유형이 <b>교과서적 마커 유전자</b>를 실제로 켜는지 점검한 그림입니다.",
+      "detailed": "갑상선유두암(PTC)의 세포유형별 대표 마커 발현(dot/heatmap)입니다. 저자 라벨 없이 재도출한 세포유형이 알려진 마커와 일치하는지로 주석의 타당성을 확인합니다."
+    },
+    {
+      "file": "validation_bars.png",
+      "title": "Figure 6. 독립 검증 지표",
+      "easy": "우리 재현 결과가 원 논문 결론과 <b>얼마나 맞는지</b>를 지표별 막대로 요약한 그림입니다.",
+      "detailed": "세포유형 일치도(ARI/NMI·정확도), 악성 갑상선세포 편중, 마커 회복 등 검증 지표를 한눈에 보여줍니다. 이 값들로 재현/부분재현/불일치를 판정합니다(validation_summary.csv 근거)."
+    }
+  ],
   "steps": [
     { "id": "setup", "title": "0. Setup GPU env (Scanpy·PyTorch·Harmony)", "ko": "GPU 분석 환경 설치 — 다른 예제와 공유", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
     { "id": "download", "title": "1. Download PTC matrices (Pu 2021, GEO GSE184362)", "ko": "저자 공개 원시 카운트 행렬(tar, ~926 MB) 내려받고 시료별로 풀기", "kind": "task", "run": "bash 01_download_thyroid.sh", "presentPath": "~/ghbio-tutorial/data/ptc-pu2021/unpacked" },
