@@ -5,8 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A **VS Code / code-server extension** ("GHBIO Co-Scientist", branded **BioIDE**) — a PlatformIO-style
-bioinformatics workbench for biologists. It runs inside browser-based code-server at
-https://ghbiocosci.iotok.org. The UX is **GHBIO Home → a tutorial's Dashboard**, plus a reliable
+bioinformatics workbench for biologists. It runs inside browser-based code-server: the public landing
+is **https://www.bioide.org** and the workbench is **https://rna.bioide.org** (the old
+`ghbiocosci.iotok.org` is retired — see the `bioide.org` domain-wiring notes in `RUN.md`). The UX is
+**GHBIO Home → a tutorial's Dashboard**, plus a reliable
 single-shot **AI Analysis** panel and AI-drafted reports/papers. Users are Korean biologists with no
 Copilot; UI strings are bilingual (Korean primary), and AI replies in Korean by default.
 
@@ -75,6 +77,7 @@ pipeline, mirror the **melanoma-tirosh** and **gpu-modern-reanalysis** pipelines
 - **Save-to-report buttons** in the AI panel write `step4_ai_report_easy.md` / `step4_ai_report.md` into the results dir. The pipeline's `05_make_report.sh` folds these in **optionally** — the QC PDF builds from figures alone when absent.
 - **`ai.easyReport` (the "🎓 고등학생 버전 보고서" one-click button).** Spec fields (`EasyReportSpec` in `modules.ts`): `label, makeReport, paperClaim, title, datasetLabel`. It fuses three inputs — the monumental paper's conclusion (`paperClaim`), the result CSVs, and saved AI drafts — into a metaphor-rich easy Korean report, then runs `makeReport` to build a PDF. **Filename contract:** the panel opens a fixed path `<results>/GHBIO_고등학생_리포트.pdf`, so `makeReport` MUST emit exactly that name (the self-contained `05_make_easy_report.sh` per pipeline does this; melanoma instead reuses its figure-rich `05_make_report.sh` with a different name). `title`/`datasetLabel` exist because the handler used to hardcode lung-cancer text — always set them per pipeline.
 - **Science-paper writer (`src/paper.ts`, `ghbio.writePaper`).** A separate webview that drafts a full paper grounded in real results, in three modes writing distinctly-named files: `edu` (교육 논문), `research` (bioinformatics reproduction), `research_hs` (high-school storytelling of the research paper) → `<pipelineId>_{edu,research,research_hs}_paper.{md,pdf}`.
+- **Figures are data-driven, like everything else.** Each pipeline declares its own figures in `pipeline.json` `figures: [{file,title,easy,detailed}]` (→ `Pipeline.figures`); the paper writer embeds only the ones that actually exist in the results dir, and feeds their captions to the model as a figure roster. Resolution is `[...GENERIC_FIGURES, ...pipeline.figures]` — the only figures still in code (`paper.ts GENERIC_FIGURES`) are the two cross-pipeline QC ones (`umap_clusters`/`qc_violin`); everything pipeline-specific lives in the manifest. Adding figures to a paper = editing JSON, no `paper.ts` change. If a paper renders with no figures ("오븐에서 굽고 있다"-style AI placeholder), the pipeline is missing a `figures[]` block.
 
 ### UI surfaces (all plain-HTML webviews unless noted)
 `activate()` (`src/extension.ts`) tracks an **`activePipelineId`** (workspaceState, persisted) — the
@@ -89,7 +92,8 @@ renderer's code-fence / inline-code handling) will prematurely close the templat
 avoids this by putting its script in a `String.raw` block and writing every backtick as the `\u0060`
 unicode escape. Markdown is rendered by small hand-rolled `md()` helpers per panel
 (headings/bold/code/lists/tables), not a library.
-- **Home (`src/home.ts`, `ghbio.openHome`)** — the landing card grid; opens on startup.
+- **Landing (`src/landing.ts`, `ghbio.openLanding`)** — the entry gate shown before the workbench: hero + a **"Verified Reproductions" roster** (`REPRODUCTIONS[]`, one row per fully-validated paper) whose per-claim popup reads each pipeline's real `validation_summary.csv` off disk, plus a Pan-Cancer Atlas showcase card that reads the atlas result files. **The public `www.bioide.org` page is a hand-adapted STATIC mirror at `~/ghbio-landing/index.html`** (served by its own nginx front-proxy, outside this repo) — it does NOT auto-update from `landing.ts`, so a landing change means editing both (the webview uses `send()`, the static page uses `/login` URL links).
+- **Home (`src/home.ts`, `ghbio.openHome`)** — the landing card grid; opens on startup. Auto-lists **every** registry pipeline (`getModules().flatMap(m => m.pipelines)`), so a new pipeline appears as a card with no code change.
 - **Create pipeline (`src/createPipeline.ts`, `ghbio.openCreatePipeline`)** — a Home card → two-step AI flow: (1) find a public-data cancer scRNA-seq paper (dataset availability is the hard filter), (2) "design pipeline" drafts an AI/GPU/Python reproduction + independent-validation plan as collapsible Markdown, saved to `~/ghbio-workspace/pipeline-drafts/`. The plan is a *draft*, NOT auto-scaffolded into `modules/`.
 - **Dashboard (`src/dashboard.ts`, `ghbio.openDashboard`)** — PlatformIO-Home-style per-tutorial/project view: step checklist, library status, context Help, and live download/align/setup **status boxes** that poll the extension (`dlstatus`/`alignstatus`/`setupstatus` messages). One renderer serves both tutorials and plain projects (a tutorial *is* a project scaffolded by `ensureProject`).
 - **Help (`src/help.ts`, `ghbio.openHelp`)** — walkthrough + glossary tailored to `activePipelineId`, read from the pipeline's `help` block.
