@@ -6,7 +6,7 @@ import * as cp from "child_process"
 import { loadProviders, streamChat } from "./ai/providers"
 import { loadModules, findPipeline, defaultPipeline } from "./modules"
 import { tutorialResultsDir } from "./util"
-import type { Pipeline } from "./pipeline"
+import type { Pipeline, Figure } from "./pipeline"
 
 // "과학논문 작성" — a webview that collects author/affiliation, then has the AI draft a paper
 // (Markdown) grounded in the pipeline's REAL results. Single-shot streaming (same reliable
@@ -80,69 +80,31 @@ const RESEARCH_HS_SYSTEM =
   "(6) 친근하고 격려하는 말투로 순수 한국어. 맨 끝에 '💡 한 줄 요약'을 넣는다. Markdown 외의 머리말/맺음말은 넣지 마세요."
 
 // -----------------------------------------------------------------------------
-// Figure registry — each figure with an easy + a detailed Korean explanation. Only figures that
-// actually exist in a given results dir are embedded, in this order. Keyed by output filename, so
-// the SAME registry serves every pipeline; existence-filtering naturally selects the right set.
+// Figures are DATA-DRIVEN: each pipeline declares its own in pipeline.json ("figures": [...]),
+// read into Pipeline.figures. Only figures that actually exist in the results dir are embedded.
 // -----------------------------------------------------------------------------
-const FIGURES: { file: string; title: string; easy: string; detailed: string }[] = [
-  // --- Metastatic melanoma (Tirosh et al., Science 2016; GSE72056) ---
-  { file: "fig1B_infercnv_heatmap.png", title: "Figure 1B. inferCNV — 악성 vs 정상 세포 분리",
-    easy: "유전자를 염색체 위치 순서로 늘어놓고 발현의 이동평균을 낸 그림입니다. 아래쪽 악성세포는 넓은 구간이 통째로 증폭/결실되는 비정상 패턴을 보입니다.",
-    detailed: "발현값을 염색체 위치 순으로 정렬하고 100-유전자 창으로 이동평균을 낸 뒤 정상세포를 기준선으로 뺀 추론 CNV(log-ratio) 히트맵입니다(원 논문 방법을 GRCh38 GTF 좌표로 직접 재구현). 행=세포, 열=유전체 위치. 악성세포는 큰 규모의 aneuploidy를, 정상 면역/기질 세포는 밋밋한 패턴을 보여 발현만으로 악성세포를 분리할 수 있음을 재현합니다." },
-  { file: "fig1C_tsne_malignant.png", title: "Figure 1C. 악성세포 tSNE (종양별 색)",
-    easy: "악성세포만 2차원 지도에 찍은 그림입니다. 색은 환자(종양). 같은 환자의 암세포끼리 모입니다.",
-    detailed: "악성세포의 tSNE 임베딩. 악성세포는 대체로 종양(환자)별로 분리되어(종양 간 이질성) 각 환자의 암이 고유한 발현 정체성을 가짐을 보여줍니다." },
-  { file: "fig1D_tsne_nonmalignant.png", title: "Figure 1D. 정상세포 tSNE (세포유형별 색)",
-    easy: "정상세포만의 지도입니다. 색은 세포유형(T·B·대식·내피·CAF·NK). 여러 환자의 같은 면역세포가 섞여 모입니다.",
-    detailed: "비악성세포의 tSNE. 종양이 아니라 세포유형별로 군집화되어, 정상세포는 환자와 무관하게 계통(lineage)이 좌표를 결정함을 보여줍니다." },
-  { file: "fig2_cell_cycle.png", title: "Figure 2. 악성세포의 세포주기 상태",
-    easy: "암세포가 분열 중인지(빨강) 쉬는 중인지(회색)를 G1/S·G2/M 신호로 나눈 산점도와, 종양별 분열세포 비율 막대입니다.",
-    detailed: "악성세포의 G1/S 및 G2/M 서명 점수 산점도(cycling/non-cycling 분류)와 종양별 분열세포 비율. 종양마다 순환 세포 비율이 크게 다름을 재현합니다." },
-  { file: "fig3_mitf_axl.png", title: "Figure 3. MITF vs AXL 상태",
-    easy: "잘 분화된 상태(MITF)와 약에 잘 안 듣는 미분화 상태(AXL)를 세포마다 점수화한 그림. 두 상태는 반대로 움직입니다.",
-    detailed: "악성세포별 MITF 프로그램(분화) vs AXL 프로그램(미분화·내성) 점수(음의 상관)와 종양별 Pearson R(대부분 음수). 한 종양 안에서도 두 상태가 연속선으로 공존해 치료 전에도 내성 씨앗 세포가 존재함을 시사합니다." },
-  { file: "fig4_caf_tcell.png", title: "Figure 4. 미세환경 — 세포유형 서명과 CAF 보체 프로그램",
-    easy: "세포유형별 대표 유전자 서명과, 보체·케모카인 유전자가 CAF에서 특히 높게 켜지는 양상을 보여줍니다.",
-    detailed: "왼쪽: 세포유형별 marker의 z-score 서명. 오른쪽: 보체·케모카인 유전자(C1S/C1R/C3/CFB/SERPING1/CXCL12/CCL19 등)의 세포유형별 발현으로 CAF 우세를 강조 — CAF–T세포 상호작용 후보. (원 논문 Fig 4A/C의 TCGA bulk 디컨볼루션은 외부 데이터가 필요해 단일세포 부분만 재현.)" },
-  { file: "fig5_tcell_exhaustion.png", title: "Figure 5. T세포 — 세포독성 vs 소진",
-    easy: "T세포를 CD4/CD8로 나누고, CD8 T세포가 얼마나 공격적인지(세포독성)와 얼마나 지쳤는지(소진)를 비교한 그림입니다.",
-    detailed: "T세포의 CD4/CD8 분류와, CD8 T세포의 세포독성 점수 vs 소진 점수 산점도(추세선 포함). 세포독성이 오르며 소진도 함께 오르는 활성화 의존적 소진 경향을 재현합니다." },
-  // --- Modern GPU reanalysis (Maynard et al.) ---
-  { file: "umap_scvi.png", title: "Figure 1. GPU scVI UMAP — modern lung-cancer reanalysis",
-    easy: "GPU로 학습한 세포 지도입니다. 점은 세포, 색은 유전자 발현이 비슷해 묶인 Leiden cluster입니다.",
-    detailed: "저자 공개 Smart-seq2 count와 metadata를 이용해 sample을 batch로 고려한 scVI latent representation을 GPU에서 학습하고 UMAP으로 시각화했습니다. 이는 2020년 Seurat 분석의 재현이 아니라, 방법론적으로 구분된 현대 재분석입니다." },
-  { file: "treatment_stage_cluster_composition.png", title: "Figure 2. Treatment-stage cluster composition",
-    easy: "치료 전(TN), 잔존질환(RD), 진행질환(PD)에서 어떤 세포 cluster가 상대적으로 많은지 보여줍니다.",
-    detailed: "저자 metadata의 naive→TN, grouped_pr→RD, grouped_pd→PD 매핑을 사용한 stage 내 cluster 비율입니다. 환자·샘플 불균형과 암세포 여부를 통제하지 않은 기술통계이므로, 인과성이나 임상 효과의 증거가 아니라 후속 검증을 위한 supportive reanalysis입니다." },
-  { file: "rd_vs_pd_program_summary.png", title: "Figure 3. RD/PD gene-program scores by sample",
-    easy: "논문에서 중요했던 RD 관련 폐포/손상-회복 신호와 PD 관련 저항성 신호를 샘플마다 비교한 그림입니다.",
-    detailed: "AQP4·SFTPB/C/D·CLDN18·NKX2-1·SUSD2·CAV1 등의 RD 관련 프로그램과 IDO1·PLAU/PLAUR·SERPINE1·GJA1 등의 PD 관련 프로그램을 log-normalized expression으로 계산한 뒤 cell이 아닌 sample 단위로 평균화했습니다. cancer-cell-only CNV/driver 검증과 독립 cohort 검증 전에는 논문 결론을 확증하는 증거로 해석할 수 없습니다." },
-  // --- Generic Scanpy QC pipelines (PBMC / NSCLC / glioblastoma) ---
+// Truly GENERIC figures produced by most Scanpy QC pipelines (PBMC / NSCLC / glioblastoma /
+// every matrix-based cancer reanalysis). They are the ONLY figures still defined in code —
+// everything pipeline-specific now lives in that pipeline's pipeline.json ("figures": [...]).
+// Kept here (not duplicated into ~12 manifests) precisely because they are cross-pipeline.
+const GENERIC_FIGURES: Figure[] = [
   { file: "umap_clusters.png", title: "Figure 1. UMAP — Leiden 클러스터",
     easy: "세포 하나하나를 2차원 지도에 점으로 찍은 그림입니다. 서로 <b>가까운 점일수록 유전자 발현이 비슷</b>하고, 색은 비슷한 세포끼리 묶은 무리(클러스터)입니다.",
     detailed: "UMAP은 각 세포의 수천 개 유전자 발현을 2차원으로 압축한 임베딩입니다. 점=세포, 색=Leiden 클러스터. 서로 떨어진 덩어리는 대체로 다른 세포 유형·상태이며, 좌표축 값 자체엔 의미가 없고 무리가 몇 개로 나뉘고 얼마나 뚜렷이 떨어져 있는지를 봅니다." },
   { file: "qc_violin.png", title: "Figure 2. QC 지표 분포",
     easy: "분석 전에 <b>품질이 낮은 세포를 골라내기 위한</b> 세 가지 값의 분포입니다.",
     detailed: "① 세포당 유전자 수(n_genes): 너무 적으면 빈 방울·죽은 세포, 너무 많으면 두 세포가 겹친 doublet 의심. ② 총 UMI(total_counts): 세포가 잡아낸 mRNA 총량. ③ 미토콘드리아 비율(pct_mito): 높으면 손상·죽어가는 세포. 이 기준으로 이상치 세포를 제거한 뒤 클러스터링했습니다." },
-  { file: "nsclc_chart.png", title: "Figure 3. 종양 미세환경 세포 유형 구성",
-    easy: "이 종양에서 <b>어떤 세포가 얼마나 많은지</b>를 막대그래프로 나타낸 것입니다.",
-    detailed: "각 클러스터를 대표 marker로 폐암 세포 유형에 배정한 뒤 유형별 세포 수·비율을 집계했습니다. Lambrechts 등(Nat Med 2018)의 폐 종양 미세환경(TME) 세포 카탈로그와 같은 관점입니다." },
-  { file: "nsclc_stromal_distribution.webp", title: "Figure 4. 간질(비종양) 세포 분포",
-    easy: "종양세포를 뺀 <b>주변(간질) 세포들</b>의 구성입니다.",
-    detailed: "면역·내피·섬유아세포 등 미세환경 세포의 분포입니다. 논문은 이 간질 세포 구성이 환자 생존과 연관됨을 TCGA(1,572명)로 보였으나, 생존 분석 자체는 임상정보가 필요해 단일 샘플에서는 분포만 제시합니다." },
-  { file: "nsclc_endothelial.webp", title: "Figure 5. 내피세포(Endothelial) 클러스터",
-    easy: "혈관을 이루는 <b>내피세포</b>가 어디에 있고 어떤 유전자를 켜는지 보여줍니다.",
-    detailed: "왼쪽: 내피세포(CLDN5·PECAM1+) 클러스터 강조. 오른쪽: 내피 관련 유전자의 클러스터별 z-score. 종양 내피는 혈관신생(HSPG2·ANGPT2·HIF1A)↑, 면역세포 유인(ICAM1·CCL2)↓ 경향을 보입니다(Lambrechts Fig.2)." },
-  { file: "nsclc_fibroblast.webp", title: "Figure 6. 섬유아세포(Fibroblast) 클러스터",
-    easy: "조직의 뼈대(세포외기질)를 만드는 <b>섬유아세포</b>의 종류를 보여줍니다.",
-    detailed: "섬유아세포 클러스터와 콜라겐 세트·근섬유아세포(ACTA2)·주변세포(RGS5) 등 아형 marker 발현입니다. 논문은 섬유아세포가 서로 다른 콜라겐을 내는 여러 아형으로 나뉨을 보였습니다(Fig.3)." },
-  { file: "nsclc_bcell_myeloid.webp", title: "Figure 7. B세포·골수성세포 클러스터",
-    easy: "항체를 만드는 <b>B세포</b>와 청소·면역을 담당하는 <b>골수성세포</b> 무리입니다.",
-    detailed: "B/형질세포(MS4A1·MZB1·IGHG1)와 골수성세포(대식세포·수지상세포·비만세포) 클러스터입니다. 종양 대식세포는 M2 성향으로 치우치는 경향이 있습니다(Fig.4)." },
-  { file: "nsclc_tcell.webp", title: "Figure 8. T세포(T cell) 클러스터",
-    easy: "면역의 핵심인 <b>T세포</b>의 하위 종류와 활성 상태를 보여줍니다.",
-    detailed: "T세포 아형(CD4/CD8·조절 T세포·세포독성)과 면역관문 유전자(PDCD1·CTLA4·LAG3·TIGIT) 발현입니다. 종양 T세포는 활성화와 함께 관문 분자가 오릅니다(Fig.5)." },
 ]
+
+// The figures for a given pipeline. Generic QC figures (UMAP/QC violin) come FIRST — they are
+// conventionally "Figure 1/2" for the Scanpy pipelines that emit them (e.g. NSCLC) — followed by
+// the pipeline's manifest-declared figures. Existence-filtering at each use site drops the ones
+// not actually on disk, so a pipeline that emits neither generic figure just shows its own set.
+function figuresFor(pipeline: Pipeline | undefined): Figure[] {
+  const own = pipeline?.figures ?? []
+  const ownFiles = new Set(own.map((f) => f.file))
+  return [...GENERIC_FIGURES.filter((g) => !ownFiles.has(g.file)), ...own]
+}
 
 const PDF_CSS = `
 @page { size: A4; margin: 20mm 18mm; }
@@ -170,7 +132,7 @@ const escHtml = (s: string) =>
 
 // Pull the pipeline's real results into a grounding block so the paper cites true numbers.
 // Reads whatever exists — generic across pipelines (melanoma / NSCLC / GPU reanalysis).
-function resultsContext(resultsDir: string): string {
+function resultsContext(resultsDir: string, figures: Figure[]): string {
   const parts: string[] = []
   const read = (rel: string) => {
     try {
@@ -198,13 +160,13 @@ function resultsContext(resultsDir: string): string {
     const text = read(file)
     if (text) parts.push(`### ${title}\n${text.split("\n").slice(0, maxLines).join("\n").trim()}`)
   }
-  const figs = FIGURES.map((f) => f.file).filter((f) => fs.existsSync(path.join(resultsDir, f)))
+  const figs = figures.map((f) => f.file).filter((f) => fs.existsSync(path.join(resultsDir, f)))
   if (figs.length) parts.push("### 생성된 그림 파일\n" + figs.join(", "))
   return parts.length ? parts.join("\n\n") : "(아직 생성된 결과 파일이 없습니다. 그래도 앱과 파이프라인 설명 중심으로 작성하세요.)"
 }
 
 // Render the AI-written paper (Markdown) + a figures appendix into one branded PDF.
-function buildPaperPdf(paperMd: string, resultsDir: string, outName: string): string {
+function buildPaperPdf(paperMd: string, resultsDir: string, outName: string, figures: Figure[]): string {
   for (const tool of ["pandoc", "wkhtmltopdf"]) {
     try {
       cp.execFileSync("bash", ["-lc", `command -v ${tool}`], { stdio: "ignore" })
@@ -220,7 +182,7 @@ function buildPaperPdf(paperMd: string, resultsDir: string, outName: string): st
     cp.execFileSync("pandoc", [mdPath, "-f", "gfm", "-t", "html5", "-o", paperHtmlPath])
     const paperHtml = fs.readFileSync(paperHtmlPath, "utf8")
 
-    const figHtml = FIGURES.filter((f) => fs.existsSync(path.join(resultsDir, f.file)))
+    const figHtml = figures.filter((f) => fs.existsSync(path.join(resultsDir, f.file)))
       .map((f) => {
         const p = path.join(resultsDir, f.file)
         const mime = f.file.endsWith(".webp") ? "image/webp" : "image/png"
@@ -263,7 +225,8 @@ function buildUserPrompt(mode: PaperMode, pipeline: Pipeline | undefined, result
 
   // Roster of the figures that actually exist, with their reference explanations, so the model can
   // write a comprehensive per-figure walkthrough even though it cannot see the images.
-  const figRoster = FIGURES.filter((f) => fs.existsSync(path.join(resultsDir, f.file)))
+  const figs = figuresFor(pipeline)
+  const figRoster = figs.filter((f) => fs.existsSync(path.join(resultsDir, f.file)))
     .map((f) => `- **${f.title}**\n  - 요지: ${f.easy}\n  - 상세: ${f.detailed}`)
     .join("\n") || "(생성된 그림 없음)"
 
@@ -284,7 +247,7 @@ function buildUserPrompt(mode: PaperMode, pipeline: Pipeline | undefined, result
       `${source}\n\n` +
       `## 원 논문 배경\n파이프라인: ${name}\n${dsBlock}\n\n` +
       `## 그림별 설명 자료 (모든 그림을 반드시 다루세요)\n${figRoster}\n\n` +
-      `## 실제 결과 수치 (인용용)\n${resultsContext(resultsDir)}\n\n` +
+      `## 실제 결과 수치 (인용용)\n${resultsContext(resultsDir, figs)}\n\n` +
       `${authorBlock}\n\n` +
       `## 작성 지침\n위 '생물정보학 재현 논문'의 내용을 **고등학생도 이해할 수 있게 이야기하듯(storytelling)** 다시 설명하라. ` +
       `딱딱한 논문 형식(초록/서론/참고문헌 등)은 필요 없고, 흥미로운 이야기 흐름으로 쓴다. ` +
@@ -306,7 +269,7 @@ function buildUserPrompt(mode: PaperMode, pipeline: Pipeline | undefined, result
       `## 재현 대상 원 논문 / 공개 데이터\n파이프라인: ${name}\n${dsBlock}\n\n` +
       `## 원 저자들의 핵심 결론 (비교 기준)\n${claim ?? "(원 논문 결론 메타데이터 없음 — 위 데이터셋 설명과 실제 결과를 근거로 서술하라.)"}\n\n` +
       `## BioIDE 재현 파이프라인 단계 (방법 섹션 근거)\n${stages}\n\n` +
-      `## 우리의 실제 재현 결과 (반드시 정량 인용)\n${resultsContext(resultsDir)}\n\n` +
+      `## 우리의 실제 재현 결과 (반드시 정량 인용)\n${resultsContext(resultsDir, figs)}\n\n` +
       `## 생성된 그림별 설명 자료 (본문에서 각 그림을 반드시 다루세요)\n${figRoster}\n\n` +
       `${authorBlock}\n\n` +
       `## 작성 지침\n이 논문은 **생물정보학 재현 연구 논문**이다(교육 도구 홍보가 아님). 우리는 동일한 공개 원자료를 ` +
@@ -320,7 +283,7 @@ function buildUserPrompt(mode: PaperMode, pipeline: Pipeline | undefined, result
   return (
     `## 개발한 웹앱(교육환경) 설명\n${APP_DESC}\n\n` +
     `## 주요 사례: ${name} 튜토리얼\n파이프라인 이름: ${name}\n${dsBlock}\n\n` +
-    `## 실제 분석 결과(반드시 인용)\n${resultsContext(resultsDir)}\n\n` +
+    `## 실제 분석 결과(반드시 인용)\n${resultsContext(resultsDir, figs)}\n\n` +
     `${authorBlock}\n\n` +
     `## 스토리라인\n나는 생물학자를 위한 생물정보학 통합개발환경을 만들었다. VS Code 기반이라 쓰기 쉽고, ` +
     `PlatformIO처럼 생물정보학이 VS Code 확장으로 추가된다. 학생이 scRNA-seq 데이터 처리 파이프라인을 ` +
@@ -405,7 +368,7 @@ export function openPaperWriter(context: vscode.ExtensionContext, pipelineId?: s
       try {
         fs.mkdirSync(resultsDir || ".", { recursive: true })
         fs.writeFileSync(path.join(resultsDir || ".", mdName), String(msg.text ?? ""), "utf8")
-        const out = buildPaperPdf(String(msg.text ?? ""), resultsDir || ".", pdfName)
+        const out = buildPaperPdf(String(msg.text ?? ""), resultsDir || ".", pdfName, figuresFor(pipeline))
         thePanel.webview.postMessage({ type: "savedPdf", file: out })
         vscode.commands.executeCommand("vscode.open", vscode.Uri.file(out))
       } catch (e: any) {

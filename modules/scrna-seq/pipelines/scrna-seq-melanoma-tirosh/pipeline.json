@@ -16,6 +16,50 @@
     }
   },
   "deepModule": true,
+  "figures": [
+    {
+      "file": "fig1B_infercnv_heatmap.png",
+      "title": "Figure 1B. inferCNV — 악성 vs 정상 세포 분리",
+      "easy": "유전자를 염색체 위치 순서로 늘어놓고 발현의 이동평균을 낸 그림입니다. 아래쪽 악성세포는 넓은 구간이 통째로 증폭/결실되는 비정상 패턴을 보입니다.",
+      "detailed": "발현값을 염색체 위치 순으로 정렬하고 100-유전자 창으로 이동평균을 낸 뒤 정상세포를 기준선으로 뺀 추론 CNV(log-ratio) 히트맵입니다(원 논문 방법을 GRCh38 GTF 좌표로 직접 재구현). 행=세포, 열=유전체 위치. 악성세포는 큰 규모의 aneuploidy를, 정상 면역/기질 세포는 밋밋한 패턴을 보여 발현만으로 악성세포를 분리할 수 있음을 재현합니다."
+    },
+    {
+      "file": "fig1C_tsne_malignant.png",
+      "title": "Figure 1C. 악성세포 tSNE (종양별 색)",
+      "easy": "악성세포만 2차원 지도에 찍은 그림입니다. 색은 환자(종양). 같은 환자의 암세포끼리 모입니다.",
+      "detailed": "악성세포의 tSNE 임베딩. 악성세포는 대체로 종양(환자)별로 분리되어(종양 간 이질성) 각 환자의 암이 고유한 발현 정체성을 가짐을 보여줍니다."
+    },
+    {
+      "file": "fig1D_tsne_nonmalignant.png",
+      "title": "Figure 1D. 정상세포 tSNE (세포유형별 색)",
+      "easy": "정상세포만의 지도입니다. 색은 세포유형(T·B·대식·내피·CAF·NK). 여러 환자의 같은 면역세포가 섞여 모입니다.",
+      "detailed": "비악성세포의 tSNE. 종양이 아니라 세포유형별로 군집화되어, 정상세포는 환자와 무관하게 계통(lineage)이 좌표를 결정함을 보여줍니다."
+    },
+    {
+      "file": "fig2_cell_cycle.png",
+      "title": "Figure 2. 악성세포의 세포주기 상태",
+      "easy": "암세포가 분열 중인지(빨강) 쉬는 중인지(회색)를 G1/S·G2/M 신호로 나눈 산점도와, 종양별 분열세포 비율 막대입니다.",
+      "detailed": "악성세포의 G1/S 및 G2/M 서명 점수 산점도(cycling/non-cycling 분류)와 종양별 분열세포 비율. 종양마다 순환 세포 비율이 크게 다름을 재현합니다."
+    },
+    {
+      "file": "fig3_mitf_axl.png",
+      "title": "Figure 3. MITF vs AXL 상태",
+      "easy": "잘 분화된 상태(MITF)와 약에 잘 안 듣는 미분화 상태(AXL)를 세포마다 점수화한 그림. 두 상태는 반대로 움직입니다.",
+      "detailed": "악성세포별 MITF 프로그램(분화) vs AXL 프로그램(미분화·내성) 점수(음의 상관)와 종양별 Pearson R(대부분 음수). 한 종양 안에서도 두 상태가 연속선으로 공존해 치료 전에도 내성 씨앗 세포가 존재함을 시사합니다."
+    },
+    {
+      "file": "fig4_caf_tcell.png",
+      "title": "Figure 4. 미세환경 — 세포유형 서명과 CAF 보체 프로그램",
+      "easy": "세포유형별 대표 유전자 서명과, 보체·케모카인 유전자가 CAF에서 특히 높게 켜지는 양상을 보여줍니다.",
+      "detailed": "왼쪽: 세포유형별 marker의 z-score 서명. 오른쪽: 보체·케모카인 유전자(C1S/C1R/C3/CFB/SERPING1/CXCL12/CCL19 등)의 세포유형별 발현으로 CAF 우세를 강조 — CAF–T세포 상호작용 후보. (원 논문 Fig 4A/C의 TCGA bulk 디컨볼루션은 외부 데이터가 필요해 단일세포 부분만 재현.)"
+    },
+    {
+      "file": "fig5_tcell_exhaustion.png",
+      "title": "Figure 5. T세포 — 세포독성 vs 소진",
+      "easy": "T세포를 CD4/CD8로 나누고, CD8 T세포가 얼마나 공격적인지(세포독성)와 얼마나 지쳤는지(소진)를 비교한 그림입니다.",
+      "detailed": "T세포의 CD4/CD8 분류와, CD8 T세포의 세포독성 점수 vs 소진 점수 산점도(추세선 포함). 세포독성이 오르며 소진도 함께 오르는 활성화 의존적 소진 경향을 재현합니다."
+    }
+  ],
   "steps": [
     { "id": "setup", "title": "0. Setup Python env (Scanpy)", "ko": "분석 환경(Scanpy) 설치 — 다른 예제와 공유", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
     { "id": "download", "title": "1. Download melanoma matrix (GSE72056)", "ko": "저자 공개 발현 행렬(~72 MB) 내려받기", "kind": "task", "run": "bash 01_download_melanoma.sh", "presentPath": "~/ghbio-tutorial/data/melanoma-gse72056/GSE72056_melanoma_single_cell_revised_v2.txt.gz" },

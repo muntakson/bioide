@@ -17,6 +17,44 @@
     }
   },
   "deepModule": true,
+  "figures": [
+    {
+      "file": "nsclc_chart.png",
+      "title": "Figure 3. 종양 미세환경 세포 유형 구성",
+      "easy": "이 종양에서 <b>어떤 세포가 얼마나 많은지</b>를 막대그래프로 나타낸 것입니다.",
+      "detailed": "각 클러스터를 대표 marker로 폐암 세포 유형에 배정한 뒤 유형별 세포 수·비율을 집계했습니다. Lambrechts 등(Nat Med 2018)의 폐 종양 미세환경(TME) 세포 카탈로그와 같은 관점입니다."
+    },
+    {
+      "file": "nsclc_stromal_distribution.webp",
+      "title": "Figure 4. 간질(비종양) 세포 분포",
+      "easy": "종양세포를 뺀 <b>주변(간질) 세포들</b>의 구성입니다.",
+      "detailed": "면역·내피·섬유아세포 등 미세환경 세포의 분포입니다. 논문은 이 간질 세포 구성이 환자 생존과 연관됨을 TCGA(1,572명)로 보였으나, 생존 분석 자체는 임상정보가 필요해 단일 샘플에서는 분포만 제시합니다."
+    },
+    {
+      "file": "nsclc_endothelial.webp",
+      "title": "Figure 5. 내피세포(Endothelial) 클러스터",
+      "easy": "혈관을 이루는 <b>내피세포</b>가 어디에 있고 어떤 유전자를 켜는지 보여줍니다.",
+      "detailed": "왼쪽: 내피세포(CLDN5·PECAM1+) 클러스터 강조. 오른쪽: 내피 관련 유전자의 클러스터별 z-score. 종양 내피는 혈관신생(HSPG2·ANGPT2·HIF1A)↑, 면역세포 유인(ICAM1·CCL2)↓ 경향을 보입니다(Lambrechts Fig.2)."
+    },
+    {
+      "file": "nsclc_fibroblast.webp",
+      "title": "Figure 6. 섬유아세포(Fibroblast) 클러스터",
+      "easy": "조직의 뼈대(세포외기질)를 만드는 <b>섬유아세포</b>의 종류를 보여줍니다.",
+      "detailed": "섬유아세포 클러스터와 콜라겐 세트·근섬유아세포(ACTA2)·주변세포(RGS5) 등 아형 marker 발현입니다. 논문은 섬유아세포가 서로 다른 콜라겐을 내는 여러 아형으로 나뉨을 보였습니다(Fig.3)."
+    },
+    {
+      "file": "nsclc_bcell_myeloid.webp",
+      "title": "Figure 7. B세포·골수성세포 클러스터",
+      "easy": "항체를 만드는 <b>B세포</b>와 청소·면역을 담당하는 <b>골수성세포</b> 무리입니다.",
+      "detailed": "B/형질세포(MS4A1·MZB1·IGHG1)와 골수성세포(대식세포·수지상세포·비만세포) 클러스터입니다. 종양 대식세포는 M2 성향으로 치우치는 경향이 있습니다(Fig.4)."
+    },
+    {
+      "file": "nsclc_tcell.webp",
+      "title": "Figure 8. T세포(T cell) 클러스터",
+      "easy": "면역의 핵심인 <b>T세포</b>의 하위 종류와 활성 상태를 보여줍니다.",
+      "detailed": "T세포 아형(CD4/CD8·조절 T세포·세포독성)과 면역관문 유전자(PDCD1·CTLA4·LAG3·TIGIT) 발현입니다. 종양 T세포는 활성화와 함께 관문 분자가 오릅니다(Fig.5)."
+    }
+  ],
   "steps": [
     { "id": "setup", "title": "0. Setup Python env", "ko": "분석 환경(Scanpy·pysam) 설치", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
     { "id": "download", "title": "1. Download NSCLC + BAM→FASTQ", "ko": "공개 폐암 BAM(~8.6 GB) 내려받아 FASTQ 복원", "kind": "task", "run": "bash 01_download_nsclc.sh", "presentPath": "~/ghbio-tutorial/data/fastq/nsclc_p1_tumor/nsclc_p1_tumor_S1_L001_R1_001.fastq.gz" },

@@ -81,6 +81,16 @@ export interface Codelab {
   cells: CodelabCell[]
 }
 
+// One output figure a paper can embed, declared in pipeline.json ("figures": [...]) so the
+// paper writer is data-driven — no per-pipeline hardcoding. `file` is relative to the results
+// dir; only figures that actually exist there are embedded. easy/detailed are Korean captions.
+export interface Figure {
+  file: string
+  title: string
+  easy: string
+  detailed: string
+}
+
 export interface Pipeline {
   id: string
   name: string
@@ -90,6 +100,9 @@ export interface Pipeline {
   help?: PipelineHelp
   dataSource?: DataSource
   codelab?: Codelab
+  // Figures this pipeline produces, for the paper writer (src/paper.ts). Declared per-pipeline
+  // in pipeline.json; generic QC figures (umap_clusters/qc_violin) come from a shared fallback.
+  figures?: Figure[]
   // A pipeline can replace a module-wide AI prompt set when its biology differs
   // materially (e.g. lung cancer rather than PBMC), while reusing the module UI.
   ai?: Partial<AiConfig>
@@ -112,6 +125,7 @@ export function loadPipelineFromDir(dir: string): Pipeline | undefined {
         help: m.help,
         dataSource: m.dataSource,
         codelab: m.codelab,
+        figures: m.figures,
         ai: m.ai,
       }
     } catch (e) {

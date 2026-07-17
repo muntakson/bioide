@@ -1,0 +1,36 @@
+{
+  "_comment": "Data-driven manifest for the pan-cancer atlas. 00_harmonize.py reads this to standardise the 11 validated per-pipeline h5ads into one schema. Paths are the project result dirs under ~/ghbio-workspace/projects/<id>/results/. Per BioIDE constitution the author cell_type labels are NOT re-consumed as analysis input — they were already re-derived independently by each source pipeline; here they are the harmonisation key only. Update paths if a source pipeline is re-run into a different results subdir.",
+  "projects_root": "~/ghbio-workspace/projects",
+  "studies": [
+    { "study_id": "lung-adeno-kim2020",            "cancer": "Lung adeno",     "platform": "10x",       "h5ad": "lung-adeno-kim2020/results/gpu_reanalysis.h5ad",                          "celltype_col": "cell_type",          "malignant_col": "malignant_call",     "malignant_regex": "^malignant", "sample_col": "sample",      "patient_col": "patient",    "progression_col": "origin_label" },
+    { "study_id": "thyroid-cancer-ptc-pu2021",     "cancer": "Thyroid PTC",    "platform": "10x",       "h5ad": "thyroid-cancer-ptc-pu2021/results/gpu_reanalysis.h5ad",                   "celltype_col": "cell_type",          "malignant_col": "malignant_call",     "malignant_regex": "^malignant", "sample_col": "sample",      "patient_col": "patient",    "progression_col": "site" },
+    { "study_id": "gastric-cancer-kumar2022",      "cancer": "Gastric",        "platform": "10x",       "h5ad": "gastric-cancer-kumar2022/results/gpu_reanalysis.h5ad",                    "celltype_col": "cell_type",          "malignant_col": "malignant_call",     "malignant_regex": "^malignant", "sample_col": "sample",      "patient_col": "patient",    "progression_col": "site" },
+    { "study_id": "hcc-tls-lu2022",                "cancer": "Liver HCC",      "platform": "10x",       "h5ad": "hcc-tls-lu2022/results/gpu_reanalysis.h5ad",                              "celltype_col": "cell_type",          "malignant_col": "malignant_call",     "malignant_regex": "^malignant", "sample_col": "sample",      "patient_col": "patient",    "progression_col": "site" },
+    { "study_id": "pancreatic-cancer-sc-rna-seq",  "cancer": "PDAC",           "platform": "10x",       "h5ad": "pancreatic-cancer-sc-rna-seq/results/gpu_reanalysis.h5ad",                "celltype_col": "cell_type",          "malignant_col": "malignant_call",     "malignant_regex": "^malignant", "sample_col": "Patient",     "patient_col": "Patient",    "progression_col": "Type" },
+    { "study_id": "hnscc-progression-choi2023",    "cancer": "Head & neck",    "platform": "10x",       "h5ad": "hnscc-progression-choi2023/results/gpu_reanalysis.h5ad",                  "celltype_col": "cell_type",          "malignant_col": "malignant_call",     "malignant_regex": "^malignant", "sample_col": "sample",      "patient_col": "patient",    "progression_col": "stage" },
+    { "study_id": "scrna-seq-gpu-modern-reanalysis","cancer": "Lung (therapy)", "platform": "smartseq2", "h5ad": "scrna-seq-gpu-modern-reanalysis/results/modern_reanalysis.h5ad",          "celltype_col": null,                 "malignant_col": null,                 "malignant_regex": null,         "sample_col": "sample_name", "patient_col": "patient_id", "progression_col": "treatment_type" },
+    { "study_id": "liver-cancer-ma2019",           "cancer": "Liver HCC/iCCA", "platform": "10x",       "h5ad": "liver-cancer-ma2019/results/gpu_reanalysis.h5ad",                         "celltype_col": "cell_type",          "malignant_col": "malignant_call",     "malignant_regex": "^malignant", "sample_col": "sample",      "patient_col": "sample",     "progression_col": "set" },
+    { "study_id": "glioblastoma-neftel-2019",      "cancer": "GBM",            "platform": "smartseq2", "h5ad": "glioblastoma-neftel-2019/results/gpu_reanalysis.h5ad",                    "celltype_col": "cell_type",          "malignant_col": "cell_type",          "malignant_regex": "^Malignant", "sample_col": "tumor",       "patient_col": "tumor",      "progression_col": null },
+    { "study_id": "puram-2017-hnscc-pemt-reproduction","cancer": "HNSCC pEMT", "platform": "smartseq2", "h5ad": "puram-2017-hnscc-pemt-reproduction/results/adata_annotated.h5ad",         "celltype_col": "noncancer_celltype", "malignant_col": "cnv_malignant_pred", "malignant_regex": "^malignant", "sample_col": "_batch",      "patient_col": "_batch",     "progression_col": "lymph_node", "counts_layer": "counts" },
+    { "study_id": "scrna-seq-melanoma-tirosh",     "cancer": "Melanoma",       "platform": "smartseq2", "h5ad": "scrna-seq-melanoma-tirosh/results/melanoma_processed.h5ad",               "celltype_col": "celltype",           "malignant_col": "malignant",          "malignant_regex": "^malignant", "sample_col": "tumor",       "patient_col": "tumor",      "progression_col": null }
+  ],
+
+  "_lineage_comment": "Per-study cell_type string -> canonical TME lineage. Anything mapping to an EPITHELIAL/TUMOUR/other value is EXCLUDED from the Use-1 TME atlas (those cells, if malignant, flow to Use-2). Extend this map when a source pipeline adds a new label.",
+  "lineage_map": {
+    "T cell": "T/NK", "T-NK cell": "T/NK", "T/NK": "T/NK",
+    "NK cell": "NK", "NK": "NK",
+    "B cell": "B", "B": "B", "B-Plasma cell": "B/Plasma",
+    "Plasma cell": "Plasma",
+    "Myeloid": "Myeloid", "Macrophage": "Myeloid", "Macrophage-Myeloid": "Myeloid", "TAM": "Myeloid",
+    "Dendritic cell": "Dendritic", "Dendritic": "Dendritic",
+    "Mast cell": "Mast", "Mast": "Mast",
+    "Endothelial": "Endothelial", "TEC": "Endothelial",
+    "Fibroblast": "Fibroblast/CAF", "CAF": "Fibroblast/CAF", "Fibroblast cell": "Fibroblast/CAF", "-Fibroblast": "Fibroblast/CAF",
+    "Stellate": "Pericyte/Stellate",
+    "Oligodendrocyte": "Oligodendrocyte",
+    "Epithelial": "Epithelial/Tumour", "Hepatocyte": "Epithelial/Tumour", "Thyrocyte": "Epithelial/Tumour",
+    "Ductal": "Epithelial/Tumour", "Acinar": "Epithelial/Tumour", "Endocrine": "Epithelial/Tumour",
+    "Malignant": "Epithelial/Tumour", "Myocyte": "Other", "myocyte": "Other", "neural cell": "Other", "—": "Unknown", "0.0": "Unknown"
+  },
+  "tme_lineages": ["T/NK", "NK", "B", "Plasma", "B/Plasma", "Myeloid", "Dendritic", "Mast", "Endothelial", "Fibroblast/CAF", "Pericyte/Stellate"]
+}

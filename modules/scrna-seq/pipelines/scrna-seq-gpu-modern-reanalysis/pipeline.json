@@ -12,6 +12,26 @@
     "download": { "extracted": "~/ghbio-tutorial/maynard-2020/scell_lung_adenocarcinoma/Data_input" }
   },
   "deepModule": true,
+  "figures": [
+    {
+      "file": "umap_scvi.png",
+      "title": "Figure 1. GPU scVI UMAP — modern lung-cancer reanalysis",
+      "easy": "GPU로 학습한 세포 지도입니다. 점은 세포, 색은 유전자 발현이 비슷해 묶인 Leiden cluster입니다.",
+      "detailed": "저자 공개 Smart-seq2 count와 metadata를 이용해 sample을 batch로 고려한 scVI latent representation을 GPU에서 학습하고 UMAP으로 시각화했습니다. 이는 2020년 Seurat 분석의 재현이 아니라, 방법론적으로 구분된 현대 재분석입니다."
+    },
+    {
+      "file": "treatment_stage_cluster_composition.png",
+      "title": "Figure 2. Treatment-stage cluster composition",
+      "easy": "치료 전(TN), 잔존질환(RD), 진행질환(PD)에서 어떤 세포 cluster가 상대적으로 많은지 보여줍니다.",
+      "detailed": "저자 metadata의 naive→TN, grouped_pr→RD, grouped_pd→PD 매핑을 사용한 stage 내 cluster 비율입니다. 환자·샘플 불균형과 암세포 여부를 통제하지 않은 기술통계이므로, 인과성이나 임상 효과의 증거가 아니라 후속 검증을 위한 supportive reanalysis입니다."
+    },
+    {
+      "file": "rd_vs_pd_program_summary.png",
+      "title": "Figure 3. RD/PD gene-program scores by sample",
+      "easy": "논문에서 중요했던 RD 관련 폐포/손상-회복 신호와 PD 관련 저항성 신호를 샘플마다 비교한 그림입니다.",
+      "detailed": "AQP4·SFTPB/C/D·CLDN18·NKX2-1·SUSD2·CAV1 등의 RD 관련 프로그램과 IDO1·PLAU/PLAUR·SERPINE1·GJA1 등의 PD 관련 프로그램을 log-normalized expression으로 계산한 뒤 cell이 아닌 sample 단위로 평균화했습니다. cancer-cell-only CNV/driver 검증과 독립 cohort 검증 전에는 논문 결론을 확증하는 증거로 해석할 수 없습니다."
+    }
+  ],
   "steps": [
     { "id": "setup", "title": "0. Set up GPU scVI environment", "ko": "CUDA GPU용 Python · scVI 설치 및 GPU 확인", "kind": "task", "run": "bash 00_setup_gpu_scvi.sh", "presentPath": "~/ghbio-venv-gpu/maynard-modern/.ready" },
     { "id": "materials", "title": "1. Verify authors' processed data", "ko": "저자 공개 Smart-seq2 matrix · metadata 확인", "kind": "task", "run": "bash 01_verify_author_data.sh", "presentPath": "~/ghbio-tutorial/maynard-2020/scell_lung_adenocarcinoma/Data_input/csv_files/S01_datafinal.csv" },

@@ -1,0 +1,107 @@
+{
+  "id": "pan-cancer-atlas",
+  "name": "범암종 아틀라스 (Pan-Cancer TME + 악성 메타프로그램 · GPU)",
+  "summary": "BioIDE의 검증 완료 11개 재현 파이프라인(≈795,700 세포·9개 암종)을 하나로 모아, (Use 1) 비악성 면역·기질(TME) 세포를 scVI/Harmony로 통합해 여러 암에 공유되는 세포상태 vs 조직특이 세포상태를 밝히고, (Use 2) 악성세포는 통합하지 않고 표본별 NMF로 분해해 모든 암에서 반복 출현하는 메타프로그램(세포주기·저산소·EMT·스트레스 등)을 도출한다. 악성세포는 환자별 CNV로 뭉치므로 두 구획을 다른 방법으로 다루는 것이 핵심. 입력은 각 소스 파이프라인이 이미 저자 라벨 없이 독립 재도출한 결과 h5ad이며, 저자 라벨은 소비하지 않는다(BioIDE 헌장).",
+  "dataSource": {
+    "provider": "BioIDE 내부 — 검증 완료 11개 파이프라인의 결과 h5ad (신규 다운로드 없음)",
+    "dataset": "Pan-cancer: Lung adeno(Kim 2020)·Thyroid PTC(Pu 2021)·Gastric(Kumar 2022)·Liver HCC(Lu 2022)·PDAC(Peng 2019)·Head&neck(Choi 2023)·Lung therapy(Maynard 2020)·Liver(Ma 2019)·GBM(Neftel 2019)·HNSCC p-EMT(Puram 2017)·Melanoma(Tirosh 2016). ≈795,700 세포·9 암종. 비악성 TME ~50만(Use 1), 악성 ~20~25만(Use 2).",
+    "note": "이 파이프라인은 원시 데이터를 새로 내려받지 않습니다. 입력은 ~/ghbio-workspace/projects/<id>/results/ 의 검증 완료 h5ad이며, 매핑은 이 폴더의 inputs.json에 데이터 주도(data-driven)로 선언돼 있습니다. BioIDE 헌장 제1조에 따라 저자 세포유형 라벨을 분석 입력으로 재소비하지 않습니다 — 각 소스 파이프라인이 이미 GPU-Python으로 독립 재도출한 라벨을 하모나이제이션 키로만 씁니다. 설계 원칙: 악성세포는 환자별 CNV 프로파일이 전사체를 지배해 '세포상태'가 아니라 '환자'로 뭉치므로 통합하지 않고 표본별 cNMF로 재발성 메타프로그램을 찾고(Gavish/Tirosh 2023 방식), 비악성 면역·기질세포는 계통이 보존돼 scVI/Harmony로 통합합니다. 원시 카운트가 없는 소스(layers['counts'] 부재)는 하모나이제이션 단계가 자동 감지·보고하며, scVI 불가 시 Harmony(로그정규화 PCA)로 자동 폴백합니다.",
+    "download": null
+  },
+  "deepModule": true,
+  "figures": [
+    {
+      "file": "umap_tme_lineage.png",
+      "title": "Figure 1. 범암종 TME UMAP — 세포 계통별 색",
+      "easy": "여러 암에서 모은 <b>비악성 면역·기질세포</b>를 한 장의 2차원 지도에 찍은 그림입니다. 가까운 점일수록 유전자 발현이 비슷하고, 색은 세포 계통(T/NK·B·골수성·섬유아세포·내피 등)입니다.",
+      "detailed": "10개 암·588,587개 비악성 세포를 공통 유전자 13,845개로 Harmony 통합한 뒤 그린 UMAP입니다. 같은 계통이 암종을 넘어 한곳에 모이면 통합이 잘 된 것 — TME 세포는 계통 정체성이 보존돼 여러 암을 함께 볼 수 있음을 보여줍니다."
+    },
+    {
+      "file": "umap_tme_cancer.png",
+      "title": "Figure 2. 범암종 TME UMAP — 암종 기원별 색",
+      "easy": "같은 지도를 이번엔 <b>어느 암에서 온 세포인지</b>로 색칠한 그림입니다. 색이 골고루 섞여 있으면 여러 암의 같은 세포가 잘 통합된 것입니다.",
+      "detailed": "색이 계통 무리 안에서 고루 섞일수록(암종별로 갈리지 않을수록) 배치효과가 잘 제거된 것입니다. Figure 1과 짝을 이뤄 계통으로는 뭉치고 암종으로는 섞였는지를 함께 봅니다."
+    },
+    {
+      "file": "umap_tme_leiden.png",
+      "title": "Figure 3. 범암종 TME UMAP — Leiden 클러스터",
+      "easy": "통합한 지도를 컴퓨터가 <b>비슷한 세포끼리 무리(클러스터)</b>로 나눈 결과입니다. 각 무리에 마커로 세포상태 이름을 붙입니다.",
+      "detailed": "Leiden 클러스터(24개)로, 각 클러스터에 15개 표준 세포상태 서명(소진 CD8·SPP1⁺/C1Q⁺ TAM·myCAF 등)을 채점해 세포상태를 부여합니다. Figure 4의 출현 매트릭스가 여기서 나옵니다."
+    },
+    {
+      "file": "tme_cellstate_occurrence.png",
+      "title": "Figure 4. 세포상태 × 암종 출현 매트릭스",
+      "easy": "각 <b>면역·기질 세포상태가 몇 개 암에 나타나는지</b>를 표로 만든 그림입니다. 여러 암에 공통이면 범암 공통, 특정 암에만 있으면 조직특이 상태입니다.",
+      "detailed": "행=세포상태, 열=암종. CD8 세포독성·C1Q⁺ TAM·naive/memory T는 10개 암 전부(범암 hallmark), CD8 소진(exhausted)은 HNSCC·두경부·간·흑색종 등 면역원성 종양에만 — 면역치료 관련 신호입니다."
+    },
+    {
+      "file": "mp_occurrence.png",
+      "title": "Figure 5. 악성 메타프로그램 × 스터디 재발성",
+      "easy": "암세포에서 반복적으로 나타나는 <b>유전자 프로그램(메타프로그램)</b>이 어느 암들에 걸쳐 재발하는지 보여주는 그림입니다.",
+      "detailed": "표본별 NMF로 뽑은 1,416개 프로그램을 유전자 중복으로 묶어 124개 메타프로그램을 만들고, 그중 13개가 ≥3개 암에 재발합니다. MP1 세포주기(9/10 암)·저산소·인터페론·AP-1 스트레스가 범암 공통입니다."
+    },
+    {
+      "file": "progression_dedifferentiation.png",
+      "title": "Figure 6. 범암종 탈분화 궤적",
+      "easy": "암이 <b>정상→종양→전이</b>로 진행하며 정상 조직의 정체성을 잃는(탈분화) 정도를 여러 암에서 함께 그린 그림입니다.",
+      "detailed": "진행단계 라벨을 가진 암(갑상선·두경부·폐·간)에서 악성세포의 정상 조직 정체성 상실을 단계별로 정렬합니다. 갑상선(TG/TPO/PAX8 상실)이 가장 깨끗한 단조 탈분화를 보입니다. 단, 원시 카운트 제약으로 일부는 noisy합니다."
+    }
+  ],
+  "steps": [
+    { "id": "setup", "title": "0. Setup 아틀라스 환경 (scanpy·scVI·cNMF·Harmony)", "ko": "공유 venv에 scvi-tools·cnmf 추가 설치 — 이미 있으면 즉시 끝", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
+    { "id": "harmonize", "title": "1. 하모나이제이션 — 11개 h5ad를 한 스키마로", "ko": "inputs.json 기반으로 계통 통제어휘·유전자 심볼·악성 플래그를 표준화하고, 비악성(TME)·악성 세포로 분리 저장. 원시 카운트 가용 여부도 보고", "kind": "task", "run": "bash run_harmonize.sh", "produces": ["harmonize_manifest.csv", "harmonize_manifest.json", "common_genes.txt", "lineage_composition.csv"] },
+    { "id": "tme_integrate", "title": "2. Use 1 — 비악성 TME 통합 (scVI/Harmony)", "ko": "비악성 면역·기질세포를 공통 유전자로 병합→HVG→scVI(원시 카운트 있을 때, GPU) 또는 Harmony 폴백→Leiden→UMAP. 대형 4연구 편중은 --max-per-sample 로 균형", "kind": "task", "run": "bash run_tme_integrate.sh", "produces": ["tme_atlas.h5ad", "umap_tme_lineage.png", "umap_tme_cancer.png", "umap_tme_leiden.png", "tme_integration_summary.txt"] },
+    { "id": "tme_annotate", "title": "3. Use 1 — 세포상태 주석 + 공유/조직특이 분석", "ko": "표준 마커 서명으로 TME 세포상태(예: 소진 CD8·SPP1⁺ TAM·myCAF) 주석, 세포상태×암종 출현 매트릭스로 범암 공통 hallmark vs 조직특이 상태 구분", "kind": "task", "run": "~/ghbio-venv/bin/python 02_tme_annotate.py", "produces": ["tme_cellstate_scores.csv", "tme_cellstate_occurrence.csv", "tme_cellstate_occurrence.png"] },
+    { "id": "malignant_nmf", "title": "4. Use 2 — 악성세포 표본별 NMF (통합 안 함)", "ko": "악성세포를 표본별로 NMF 분해해 표본마다 유전자 프로그램 도출. 환자별 CNV로 뭉치므로 통합하지 않고 표본별로 처리", "kind": "task", "run": "~/ghbio-venv/bin/python 03_malignant_nmf.py", "produces": ["malignant_programs.csv", "malignant_programs.json", "malignant_nmf_summary.txt"] },
+    { "id": "meta_programs", "title": "5. Use 2 — 재발성 메타프로그램 도출", "ko": "표본별 프로그램을 유전자 중복(Jaccard)으로 클러스터링해 모든 암에서 반복 출현하는 메타프로그램(MP) 도출·주석, MP×암종 출현 히트맵", "kind": "task", "run": "~/ghbio-venv/bin/python 04_meta_programs.py", "produces": ["meta_programs.json", "mp_occurrence.csv", "mp_occurrence.png", "meta_programs_summary.txt"] },
+    { "id": "progression", "title": "6. Use 3 — 범암종 탈분화 궤적 (보너스)", "ko": "진행단계 라벨을 가진 4개 암(폐·간·두경부·갑상선)에서 악성세포의 정상조직 정체성 상실을 정상→종양→전이 축으로 정렬한 공통 히어로 그림", "kind": "task", "run": "~/ghbio-venv/bin/python 05_progression.py", "produces": ["progression_scores.csv", "progression_dedifferentiation.png"] },
+    { "id": "validate", "title": "7. 아틀라스 자기일관성 검증 + 판정", "ko": "통합이 암종을 넘어 공유 세포상태를 만드는지, 재발성 메타프로그램이 있는지, 탈분화 축이 재현되는지 점검해 AGREE/PARTIAL/DISAGREE 판정", "kind": "task", "run": "~/ghbio-venv/bin/python 06_validate.py", "produces": ["atlas_validation_summary.csv", "atlas_validation_verdict.txt"] },
+    { "id": "ai", "title": "8. AI 분석 & 가설", "ko": "AI 해석·가설 (채팅 아님, 단발 패널)", "kind": "ai" },
+    { "id": "report", "title": "9. PDF 보고서 생성", "ko": "TME 아틀라스·메타프로그램·탈분화·검증 그림을 하나의 PDF로", "kind": "task", "run": "~/ghbio-venv/bin/python 07_make_report.py", "produces": ["GHBIO_pan_cancer_atlas_report.pdf"] }
+  ],
+  "ai": {
+    "system": "You are the BioIDE AI Co-Scientist for a PAN-CANCER ATLAS built from BioIDE's own 11 validated independent-reproduction pipelines (≈795,700 cells across 9 cancer types: lung adeno, thyroid PTC, gastric, liver HCC (x2), PDAC, head & neck (x2), GBM, melanoma). Two analyses are combined. USE 1 (non-malignant TME): immune and stromal cells are integrated across studies with scVI (or Harmony fallback) using sample as batch and platform as covariate, then annotated into canonical cell states (CD8 cytotoxic/exhausted, Treg, NK, B, plasma, SPP1+/C1Q+ TAM, monocyte, cDC, myCAF/iCAF, tip/lymphatic endothelial); the key output is a cell-state x cancer OCCURRENCE matrix separating pan-cancer 'hallmark' states from tissue-specific ones. USE 2 (malignant): malignant cells are NOT integrated (they cluster by patient because private CNV dominates their transcriptome); instead each sample is factored independently by NMF and the per-sample programs are clustered by gene overlap into recurrent META-PROGRAMS (cell cycle, hypoxia, EMT/pEMT, stress, interferon, respiration, plus tissue-specific ones), following Gavish/Tirosh 2023. USE 3 (bonus): for the four studies with ordered normal->tumour->metastasis stage labels, a cross-cancer dedifferentiation trajectory tracks loss of normal-tissue identity. Per the BioIDE constitution, author cell-type labels are NOT re-consumed as analysis input — each source pipeline already re-derived them with fresh GPU-Python code; here they are only a harmonisation key. When interpreting: explain shared vs tissue-specific TME states, name and interpret recurrent malignant meta-programs, connect them to each source paper's original finding (melanoma MITF/AXL, GBM AC/MES/NPC/OPC, lung tS1/2/3, HNSCC p-EMT) as facets of one framework, and be explicit about limits — platform mix (Smart-seq2 vs 10x), the big-4 studies dominating cell counts, and that a per-cell score is a proxy. Distinguish observation from hypothesis. Reply in Korean unless asked otherwise.",
+    "readyFile": "atlas_validation_summary.csv",
+    "readyHint": "아틀라스 결과가 아직 없습니다. 먼저 1~7단계(하모나이제이션→TME 통합→주석→악성 NMF→메타프로그램→탈분화→검증)를 실행해 주세요.",
+    "context": [
+      { "file": "harmonize_manifest.csv", "heading": "입력 11개 스터디 하모나이제이션 요약 (세포수·원시카운트 가용·공통유전자) (harmonize_manifest.csv)" },
+      { "file": "lineage_composition.csv", "heading": "스터디×계통 세포수 (lineage_composition.csv)" },
+      { "file": "tme_cellstate_occurrence.csv", "heading": "Use 1 — TME 세포상태×암종 출현 매트릭스 (tme_cellstate_occurrence.csv)" },
+      { "file": "mp_occurrence.csv", "heading": "Use 2 — 악성 메타프로그램×스터디 재발성 (mp_occurrence.csv)" },
+      { "file": "meta_programs_summary.txt", "heading": "Use 2 — 메타프로그램 요약 (meta_programs_summary.txt)" },
+      { "file": "progression_scores.csv", "heading": "Use 3 — 진행단계별 탈분화·증식 점수 (progression_scores.csv)" },
+      { "file": "atlas_validation_summary.csv", "heading": "아틀라스 자기일관성 검증 지표·판정 (atlas_validation_summary.csv)" }
+    ],
+    "prompts": [
+      { "key": "shared_tme", "label": "공유 vs 조직특이 TME", "q": "tme_cellstate_occurrence.csv를 근거로, 어떤 면역·기질 세포상태가 여러 암종에 공유되는 '범암 공통(hallmark)' 상태이고 어떤 것이 특정 암 전용(조직특이)인지 표로 구분해줘. 각 상태의 마커 근거와, 왜 그 상태가 여러 암에 공통일 수 있는지(예: 소진 CD8·SPP1⁺ TAM) 생물학적으로 설명하고, 배치효과로 인한 착시 가능성과 구분해줘." },
+      { "key": "meta_programs", "label": "악성 메타프로그램 해석", "q": "mp_occurrence.csv·meta_programs_summary.txt를 근거로, 모든 암에서 반복 출현하는 악성세포 메타프로그램(예: 세포주기·저산소·EMT·스트레스·인터페론)과 조직특이 프로그램을 구분해 명명·해석해줘. 각 소스 논문의 원래 발견(흑색종 MITF↔AXL, GBM 4상태, 폐 tS1/2/3, 두경부 p-EMT)이 이 메타프로그램 프레임 안에서 어떻게 하나로 통합되는지 설명해줘." },
+      { "key": "why_split", "label": "왜 두 구획을 다르게?", "q": "이 아틀라스가 비악성 세포는 통합하고 악성세포는 통합하지 않은 이유를, 악성세포가 환자별 CNV로 뭉치는 성질과 연결해 설명해줘. 만약 악성세포까지 scVI로 통합했다면 무엇이 잘못됐을지(과소보정/과대보정), 그리고 표본별 NMF+메타프로그램 접근이 왜 옳은지 논증해줘." },
+      { "key": "dedifferentiation", "label": "탈분화 궤적", "q": "progression_scores.csv와 그림을 근거로, 정상→종양→전이로 갈수록 악성세포가 정상조직 정체성을 잃는(탈분화) 현상이 폐·간·두경부·갑상선에서 공통으로 나타나는지 판단하고, 암종별 차이와 임상적 함의(예후·표적)를 서술해줘. 관찰과 가설을 분리해줘." },
+      { "key": "hypothesis", "label": "가설·기여", "q": "TME 공유 상태와 악성 메타프로그램, 탈분화 궤적을 종합해 (1) 검증 가능한 범암 가설 3~5개와 (2) 이 통합 아틀라스가 커뮤니티에 주는 기여를 서술해줘. 임상적 과장을 피하고, 플랫폼 혼재·대형연구 편중·단일세포 점수의 한계를 명시해줘." }
+    ]
+  },
+  "help": {
+    "intro": "이 파이프라인은 BioIDE가 이미 <b>독립 재현·검증</b>한 11개 암 파이프라인(≈795,700 세포·9개 암종)을 하나로 모아 <b>범암종 아틀라스</b>를 만듭니다. 핵심은 두 세포 구획을 <b>다른 방법</b>으로 다루는 것입니다. <b>Use 1(비악성 TME)</b>: 면역·기질세포는 계통 정체성이 보존돼 암종을 넘어 <b>통합</b>이 성립하므로 scVI/Harmony로 합쳐 '여러 암에 공유되는 세포상태'와 '조직특이 세포상태'를 구분합니다. <b>Use 2(악성세포)</b>: 악성세포는 각 환자의 사적 CNV가 전사체를 지배해 '세포상태'가 아니라 '환자'로 뭉치므로 <b>통합하지 않고</b>, 표본별 NMF로 프로그램을 뽑은 뒤 유전자 중복으로 묶어 <b>모든 암에서 반복되는 메타프로그램</b>을 찾습니다(Gavish/Tirosh 2023 방식). 입력은 각 소스 파이프라인의 결과 h5ad이며, <b>저자 라벨은 재소비하지 않습니다</b>(헌장 제1조) — 매핑은 inputs.json에 데이터 주도로 선언돼 있습니다.",
+    "steps": {
+      "setup": "공유 venv(~/ghbio-venv)에 <b>scvi-tools</b>(TME 통합)와 <b>cnmf</b>(악성 메타프로그램)를 추가 설치합니다. 이미 있으면 즉시 끝납니다.",
+      "harmonize": "<b>inputs.json</b>에 선언된 11개 결과 h5ad를 읽어 계통 라벨을 <b>통제 어휘</b>로, 유전자 심볼을 대문자로 통일하고, 악성/비악성 플래그를 만들어 각 스터디를 <b>TME 파일과 악성 파일</b>로 나눠 저장합니다. 원시 카운트가 없는 스터디(scVI/cNMF에 필요)를 자동 감지해 보고합니다.",
+      "tme_integrate": "<b>Use 1.</b> 비악성 세포를 공통 유전자로 병합→HVG→<b>scVI</b>(원시 카운트가 모두 있고 GPU가 있을 때) 또는 <b>Harmony</b> 폴백으로 <b>sample</b> 배치를 통합→Leiden→UMAP. 대형 4연구(폐·갑상선·위·간)가 세포수를 지배하므로 <code>--max-per-sample</code>로 균형을 맞출 수 있습니다.",
+      "tme_annotate": "표준 마커 서명으로 각 클러스터에 <b>세포상태</b>(소진 CD8·SPP1⁺ TAM·myCAF 등)를 붙이고, <b>세포상태×암종 출현 매트릭스</b>로 범암 공통 hallmark 상태와 조직특이 상태를 구분합니다.",
+      "malignant_nmf": "<b>Use 2.</b> 악성세포를 <b>표본별로</b> NMF 분해해 표본마다 유전자 프로그램을 뽑습니다(통합하지 않음). 최소 세포수 미만 표본은 건너뜁니다.",
+      "meta_programs": "표본별 프로그램을 <b>유전자 중복(Jaccard)</b>으로 클러스터링해 여러 표본·암종에서 반복되는 <b>메타프로그램(MP)</b>을 도출·명명하고, MP×스터디 재발성 히트맵을 만듭니다.",
+      "progression": "<b>Use 3(보너스).</b> 진행단계 라벨을 가진 4개 암에서 악성세포의 <b>정상조직 정체성 상실</b>을 정상→종양→전이 축으로 정렬해 암종을 가로지르는 공통 <b>탈분화 궤적</b> 그림을 만듭니다.",
+      "validate": "통합이 암종을 넘어 <b>공유 세포상태</b>를 만드는지, <b>재발성 메타프로그램</b>이 있는지, <b>탈분화 축</b>이 재현되는지 점검해 <b>AGREE/PARTIAL/DISAGREE</b>로 판정합니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. 공유/조직특이 TME, 악성 메타프로그램, 탈분화 궤적을 해석하고 가설을 받습니다.",
+      "report": "모든 그림·요약·검증을 하나의 <b>PDF 보고서</b>로 정리합니다."
+    },
+    "glossary": [
+      { "term": "왜 악성세포는 통합하지 않나", "def": "악성세포의 전사체는 각 종양의 <b>사적 CNV(복제수 변이)</b>가 지배해, 통합하면 '세포상태'가 아니라 '환자'별로 뭉칩니다. 억지로 배치보정하면 생물학이 소거됩니다. 그래서 표본별 NMF로 프로그램을 뽑아 <b>교차표본 메타프로그램</b>을 찾습니다." },
+      { "term": "메타프로그램 (meta-program)", "def": "여러 표본·암종에서 <b>반복 출현하는</b> 악성세포 유전자 프로그램. 표본별 NMF 프로그램을 유전자 중복으로 묶어 도출합니다. 예: 세포주기·저산소·EMT·스트레스·인터페론. Gavish/Tirosh 2023 <i>Nature</i> 방식." },
+      { "term": "TME (종양 미세환경)", "def": "종양 속 <b>비악성</b> 면역·기질세포 생태계 — T/NK·B/형질·골수성(대식세포)·수지상·비만세포·내피·섬유아세포(CAF). 계통 정체성이 보존돼 암종을 넘어 통합이 잘 됩니다." },
+      { "term": "세포상태×암종 출현 매트릭스", "def": "각 TME 세포상태가 <b>몇 개 암종</b>에 나타나는지 집계한 표. 여러 암에 공통이면 '범암 hallmark', 특정 암 전용이면 '조직특이' 상태로 구분합니다." },
+      { "term": "scVI / Harmony", "def": "여러 시료·플랫폼의 배치효과를 보정해 같은 세포유형이 섞이도록 임베딩을 정렬하는 통합 방법. <b>scVI</b>는 원시 카운트 기반 딥러닝(GPU), <b>Harmony</b>는 PCA 기반. 이 파이프라인은 카운트가 있으면 scVI, 없으면 Harmony로 폴백합니다." },
+      { "term": "데이터 주도(inputs.json)", "def": "11개 입력 h5ad 경로와 컬럼 매핑·계통 통제어휘를 코드가 아닌 <b>JSON</b>으로 선언합니다. 소스 파이프라인이 바뀌면 이 파일만 고치면 됩니다." },
+      { "term": "원시 카운트 복원", "def": "scVI·NMF는 <b>정규화 전 원시 카운트</b>가 필요합니다. 일부 소스 h5ad에는 카운트 레이어가 없어, 하모나이제이션 단계가 이를 감지해 보고하고(없으면 소스 재실행 권장) 통합은 Harmony로 폴백합니다." }
+    ]
+  }
+}
