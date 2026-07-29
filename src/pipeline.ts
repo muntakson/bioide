@@ -91,6 +91,15 @@ export interface Figure {
   detailed: string
 }
 
+// A first-run setup step shown as a live checklist on the Home card (home.ts). `check`
+// is an optional path (~ or absolute) whose existence marks the item done — so the card
+// ticks items off as the user completes setup (e.g. writing ~/.config/ghbio/gcp.json).
+// Declared per-pipeline in pipeline.json ("todo": [...]) — no TypeScript change to add one.
+export interface TodoItem {
+  label: string
+  check?: string
+}
+
 export interface Pipeline {
   id: string
   name: string
@@ -100,6 +109,7 @@ export interface Pipeline {
   help?: PipelineHelp
   dataSource?: DataSource
   codelab?: Codelab
+  todo?: TodoItem[]
   // Figures this pipeline produces, for the paper writer (src/paper.ts). Declared per-pipeline
   // in pipeline.json; generic QC figures (umap_clusters/qc_violin) come from a shared fallback.
   figures?: Figure[]
@@ -125,6 +135,7 @@ export function loadPipelineFromDir(dir: string): Pipeline | undefined {
         help: m.help,
         dataSource: m.dataSource,
         codelab: m.codelab,
+        todo: m.todo,
         figures: m.figures,
         ai: m.ai,
       }

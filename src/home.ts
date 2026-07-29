@@ -2,8 +2,8 @@ import * as vscode from "vscode"
 import * as fs from "fs"
 import * as path from "path"
 import { TutorialProvider } from "./tutorials"
-import { pipelineProgress } from "./pipeline"
-import { projectsDir } from "./util"
+import { pipelineProgress, Pipeline } from "./pipeline"
+import { projectsDir, expandHome } from "./util"
 import { missionHtml } from "./mission"
 
 let panel: vscode.WebviewPanel | undefined
@@ -23,6 +23,23 @@ export function openHome(context: vscode.ExtensionContext, tutorials: TutorialPr
   panel.reveal()
 }
 
+// A live first-run checklist on the card: each todo item ticks ✓ when its `check` path
+// exists, so the user sees setup progress (GCP billing, auth, first subset) at a glance.
+function todoHtml(pl: Pipeline): string {
+  if (!pl.todo?.length) return ""
+  const items = pl.todo
+    .map((t) => {
+      const done = t.check ? fs.existsSync(expandHome(t.check)) : false
+      return `<li class="${done ? "done" : ""}"><span class="tk">${done ? "✓" : "▢"}</span>${esc(t.label)}</li>`
+    })
+    .join("")
+  const remaining = pl.todo.filter((t) => !(t.check && fs.existsSync(expandHome(t.check)))).length
+  return `<details class="todo"${remaining ? " open" : ""}>
+    <summary>⚠ 시작 전 준비 (TODO) · 남은 항목 ${remaining}/${pl.todo.length}</summary>
+    <ul>${items}</ul>
+  </details>`
+}
+
 function tutorialCards(tutorials: TutorialProvider): { html: string; ids: Set<string> } {
   const ids = new Set<string>()
   const cards = tutorials
@@ -37,6 +54,7 @@ function tutorialCards(tutorials: TutorialProvider): { html: string; ids: Set<st
           <p>${esc(pl.summary ?? "")}</p>
           <div class="bar"><i style="width:${pct}%"></i></div>
           <div class="meta">진행: ${done} / ${total} 결과 단계</div>
+          ${todoHtml(pl)}
           <div class="cbtns">
             <button onclick="send('ghbio.openDashboard','${esc(pl.id)}')">대시보드 열기</button>
           </div>
@@ -242,6 +260,13 @@ export function render(p: vscode.WebviewPanel, tutorials: TutorialProvider) {
   .bar { height: 7px; background: #21313a; border-radius: 6px; overflow: hidden; margin: 8px 0 6px; }
   .bar > i { display:block; height:100%; background: linear-gradient(90deg,#2dd4bf,#22d3ee); }
   .meta { font-size: 12px; color: #b6c2cf; margin-bottom: 10px; }
+  .todo { margin: 0 0 10px; border:1px solid #5a4620; border-left:3px solid #d9a441; border-radius:8px; background:#1b1710; }
+  .todo > summary { cursor:pointer; list-style:none; padding:7px 10px; font-size:12px; font-weight:700; color:#e8c37a; }
+  .todo > summary::-webkit-details-marker { display:none; }
+  .todo ul { margin:0; padding:2px 10px 9px 10px; list-style:none; }
+  .todo li { font-size:12px; color:#cbb896; padding:2px 0; display:flex; gap:7px; align-items:baseline; }
+  .todo li.done { color:#6fae7e; text-decoration:line-through; }
+  .todo li .tk { font-weight:800; }
   .cbtns { display:flex; gap:8px; }
   button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
     background: linear-gradient(135deg,#2dd4bf,#22d3ee); color: #06121a; font-weight: 700;

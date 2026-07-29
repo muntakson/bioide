@@ -1,0 +1,109 @@
+{
+  "id": "tahoe100m-drug-response",
+  "name": "Tahoe-100M 항암제 반응 재현 — 한 약물, 여러 암세포주 (Arc Virtual Cell Atlas · GPU)",
+  "summary": "Tahoe-100M(Vevo Therapeutics × Arc Institute) — 50개 암세포주 × ~1,100개 약물의 9,500만+ 세포 단일세포 약물 섭동(perturbation) 아틀라스 — 에서 관심 약물 하나와 DMSO 대조를 여러 암세포주에 걸쳐 골라 스트리밍 추출하고, 저자/제공 라벨을 소비하지 않고 새로 짠 GPU·Python 코드로 그 약물의 전사체 반응(차등발현)을 재도출한다. 핵심 질문: 이 약물의 서명이 여러 암 맥락에서 재현되는가(세포주 간 logFC 상관), 그리고 알려진 표적/기전을 실제로 맞히는가. 1.69 TB 전체를 받지 않고 필요한 세포만 스트리밍하는 것이 관건 (BioIDE 헌장).",
+  "dataSource": {
+    "provider": "Arc Virtual Cell Atlas / Tahoe-100M (Requester-Pays GCS; 메타데이터 parquet + 플레이트 h5ad에서 gcsfs 스트리밍 서브셋)",
+    "dataset": "Tahoe-100M — Vevo의 MOSAIC 플랫폼으로 생성한 95,624,334 세포·50개 암세포주·~1,100개 소분자·14개 플레이트(~1.69 TB)의 단일세포 약물 섭동 아틀라스. 셀별 obs_metadata(BARCODE_SUB_LIB_ID·drug·sample·plate·cell_line_id), drug_metadata(targets·moa-fine·canonical_smiles), cell_line_metadata(cell_name·Organ·Driver_Gene_Symbol) 등 parquet 테이블 제공. 여기서 한 약물(기본 Vorinostat, 범-HDAC 억제제) + DMSO 대조를 선택.",
+    "datasetUrl": "https://huggingface.co/datasets/tahoebio/Tahoe-100M",
+    "fastqUrl": "gs://arc-institute-virtual-cell-atlas/tahoe100M/2025-02-25",
+    "size": "가변 (선택된 약물·세포주 서브셋만; 기본 6개 세포주 × 그룹당 ≤1,500 세포 ≈ 1~2만 세포). Requester-Pays: 스트리밍 서브셋이라 단일 약물 실행은 월 2 TB 무료 한도 안.",
+    "note": "BioIDE 헌장 제1조: 제공된 약물 '반응/민감성' 라벨을 분석 입력으로 쓰지 않습니다. Tahoe-100M은 ~14개 플레이트 h5ad(~1.69 TB)로 샤딩돼 있어 전체를 받는 것은 비현실적입니다. 그래서 (1) 작은 메타데이터 parquet를 받아 관심 약물과 같은 플레이트·세포주의 DMSO 대조 세포를 선택하고, (2) 각 플레이트 h5ad를 gcsfs backed 모드로 열어 선택된 세포 '행만' 스트리밍 추출해 작은 tahoe_subset.h5ad를 만든 뒤, (3) 우리 GPU 코드로 세포주별 약물 vs DMSO 차등발현을 재도출하고 세포주 간 재현성(logFC 상관)과 표적/기전 회복을 봅니다. 저자와 다른 독립 경로로 '약물 서명이 여러 암 맥락에서 재현되는가'를 검증합니다(제6조). ⚠ 초안(DRAFT): 날짜 프리픽스(기본 2025-02-25)·컬럼명·플레이트 h5ad 경로/바코드 형식은 첫 실전 실행에서 확인해야 합니다(01_query_metadata.py가 gsutil ls로 자동 탐색). Requester-Pays이므로 GCP 프로젝트(billing)와 gsutil/gcsfs 인증이 선행되어야 합니다.",
+    "download": {
+      "tar": "~/ghbio-tutorial/data/tahoe100m/selected_cells.csv",
+      "totalBytes": 5000000,
+      "extracted": "~/ghbio-tutorial/data/tahoe100m/tahoe_subset.h5ad"
+    }
+  },
+  "deepModule": true,
+  "todo": [
+    { "label": "GPU + gcsfs 환경 설치 — 0단계(00_setup_env.sh) 실행", "check": "~/ghbio-venv/bin/python" },
+    { "label": "GCP 프로젝트(billing) 설정 — bash ../_shared/setup_gcp.sh <project-id>", "check": "~/.config/ghbio/gcp.json" },
+    { "label": "gsutil/gcsfs 인증 — gcloud auth login && gcloud auth application-default login", "check": "~/.config/gcloud/application_default_credentials.json" },
+    { "label": "약물($TAHOE_DRUG) 선택 후 세포 선별 — 1단계(selected_cells.csv 생성)", "check": "~/ghbio-tutorial/data/tahoe100m/selected_cells.csv" }
+  ],
+  "figures": [
+    { "file": "umap_condition.png", "title": "Figure 1. UMAP — 약물 vs DMSO 대조",
+      "easy": "약을 처리한 세포와 대조(DMSO)를 2차원 지도에 점으로 찍어 <b>약이 세포 상태를 얼마나 바꾸는지</b> 보여줍니다.",
+      "detailed": "약물 처리군과 DMSO 대조군을 색으로 구분한 UMAP. 두 군이 세포주 안에서 갈라지면 약물이 뚜렷한 전사체 변화를 일으킨 것입니다." },
+    { "file": "umap_cellline.png", "title": "Figure 2. UMAP — 세포주",
+      "easy": "각 세포가 <b>어느 암세포주</b>에서 왔는지 색으로 보여줍니다.",
+      "detailed": "여러 암세포주를 Harmony로 통합했습니다. 세포주는 배치 축이자 '약물 반응이 맥락마다 다른가'를 보는 축입니다." },
+    { "file": "umap_clusters.png", "title": "Figure 3. UMAP — Leiden 클러스터",
+      "easy": "발현이 비슷한 세포끼리 묶은 무리(클러스터)입니다.",
+      "detailed": "약물/대조·세포주와 대조해 반응 상태가 클러스터를 형성하는지 봅니다." },
+    { "file": "volcano.png", "title": "Figure 4. 컨센서스 약물 서명 (volcano)",
+      "easy": "약을 처리했을 때 <b>어떤 유전자가 켜지고(오른쪽) 꺼지는지(왼쪽)</b>, 얼마나 확실한지(위쪽) 한눈에 보여줍니다.",
+      "detailed": "여러 세포주 평균 log2FC(약물 vs DMSO) 대 -log10 최소 padj. 위·양옆 끝의 유전자가 약물의 핵심 반응 유전자입니다." },
+    { "file": "de_top_heatmap.png", "title": "Figure 5. 세포주별 top DE 유전자 히트맵",
+      "easy": "가장 크게 변한 유전자들이 <b>세포주마다 같은 방향으로</b> 변하는지 색으로 비교합니다(빨강=증가, 파랑=감소).",
+      "detailed": "상위 컨센서스 DE 유전자 × 세포주 log2FC. 열이 일관된 색이면 약물 반응이 세포주 간 재현됩니다." },
+    { "file": "reproducibility.png", "title": "Figure 6. 세포주 간 재현성 (logFC 상관)",
+      "easy": "두 암세포주에서 <b>같은 약이 같은 유전자를 같은 방향으로</b> 바꾸는지 산점도로 봅니다(대각선에 몰릴수록 재현성 높음).",
+      "detailed": "두 세포주의 유전자별 log2FC 산점도와 상관계수. 높은 상관은 약물 효과가 세포주 특이 잡음이 아니라 재현되는 실제 신호임을 뜻합니다." },
+    { "file": "target_response.png", "title": "Figure 7. 알려진 표적 유전자 반응",
+      "easy": "약이 <b>원래 노리는 표적</b>과 관련된 유전자들이 실제로 변했는지 막대로 보여줍니다.",
+      "detailed": "drug_metadata의 표적 유전자들의 컨센서스 log2FC. 기대 방향으로 움직이면 우리 재도출이 약물 기전을 맞힌 것입니다." },
+    { "file": "validation_bars.png", "title": "Figure 8. 독립 검증 지표",
+      "easy": "재현성과 표적 회복을 지표별 막대로 요약합니다.",
+      "detailed": "세포주 간 평균 logFC 상관·표적 회복 비율을 보여줍니다. 이 값들로 재현/부분재현/불일치를 판정합니다." }
+  ],
+  "steps": [
+    { "id": "setup", "title": "0. Setup env (Scanpy·PyTorch·Harmony + gsutil·gcsfs)", "ko": "GPU 분석 환경 + Google Cloud SDK(gsutil) + gcsfs(스트리밍) 설치·확인", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
+    { "id": "download", "title": "1. Select drug + controls & stream-subset (Tahoe-100M)", "ko": "메타데이터에서 관심 약물+DMSO 대조 선택 → 플레이트 h5ad에서 해당 세포만 gcsfs로 스트리밍 추출 (전체 1.69 TB 미다운로드)", "kind": "task", "run": "bash 01_download_tahoe.sh", "presentPath": "~/ghbio-tutorial/data/tahoe100m/tahoe_subset.h5ad" },
+    { "id": "gpu", "title": "2. GPU 독립 재분석 (약물 반응 재도출)", "ko": "서브셋 로드→QC→정규화→HVG→GPU 스케일·PCA→Harmony(세포주)→Leiden→UMAP→세포주별 약물 vs DMSO 차등발현→세포주 간 재현성(logFC 상관)→표적/기전 회복 (전부 우리 코드로 재도출)", "kind": "task", "run": "bash run_gpu_reanalysis.sh", "produces": ["tahoe_reanalysis.h5ad", "de_by_cellline.csv", "reproducibility.csv", "consensus_signature.csv", "target_recovery.csv", "composition.csv", "umap_condition.png", "umap_cellline.png", "umap_clusters.png", "volcano.png", "de_top_heatmap.png", "reproducibility.png", "target_response.png", "qc_summary.csv", "run_summary.txt", "provenance.json"] },
+    { "id": "validate", "title": "3. 독립 검증 — 재현성 + 표적/기전 회복", "ko": "세포주 간 logFC 상관(재현성), 컨센서스 DE 유전자 수, 알려진 표적 회복 비율로 재현/부분재현/불일치 판정 (헌장 제2조)", "kind": "task", "run": "~/ghbio-venv/bin/python 03_validate.py", "produces": ["validation_summary.csv", "validation_verdict.txt", "validation_bars.png"] },
+    { "id": "ai", "title": "4. AI analysis & hypotheses", "ko": "AI 해석·가설 (채팅 아님, 단발 패널)", "kind": "ai" },
+    { "id": "report", "title": "5. Generate PDF report", "ko": "독립 재분석 그림 + 검증 결과를 하나의 PDF로", "kind": "task", "run": "bash 05_make_report.sh", "produces": ["GHBIO_tahoe100m_drug_report.pdf"] }
+  ],
+  "ai": {
+    "system": "You are the BioIDE AI Co-Scientist for an INDEPENDENT GPU reanalysis of a single drug's transcriptional response drawn from Tahoe-100M (Vevo Therapeutics × Arc Institute's Virtual Cell Atlas). Tahoe-100M is a >95-million-cell single-cell DRUG PERTURBATION atlas: 50 cancer cell lines exposed to ~1,100 small molecules on Vevo's MOSAIC hashing platform, sharded into ~14 per-plate h5ads (~1.69 TB). Because the atlas is far too large to download whole, this pipeline read the small metadata parquet tables, selected one target drug plus its DMSO vehicle controls across a handful of cancer cell lines, and STREAM-SUBSET only those cells (gcsfs backed reads) into a small local object. Per the BioIDE constitution we did NOT consume any provided drug-'response'/'sensitivity' label: starting from raw UMI counts, our own GPU code (QC, normalisation, HVG, PyTorch scaling + PCA, Harmony integration with batch=cell_line, Leiden, UMAP, then per-cell-line Wilcoxon differential expression of drug vs DMSO) re-derived the drug's signature. We then measured (1) CROSS-CELL-LINE REPRODUCIBILITY — the mean pairwise correlation of per-gene log2 fold-changes between independent cell lines (a genuine drug effect agrees across contexts; cell-line-specific noise does not) — and (2) ON-MECHANISM TARGET RECOVERY — whether the drug's known target genes (from drug_metadata: targets, moa-fine) move in the expected direction and rank among the top consensus DE genes. Interpret in a cancer-pharmacology frame: a strong, reproducible, on-target signature supports the drug's mechanism across cancer contexts; a context-specific signature suggests cell-line-dependent response (driver-gene dependence, resistance). For the default drug Vorinostat (a pan-HDAC inhibitor) expect broad chromatin/transcription remodelling, CDKN1A (p21) induction, cell-cycle down. Judge whether our independent reanalysis yields a reproducible, on-mechanism drug signature (agree / partial / disagree), citing the validation metrics (mean cross-line logFC correlation, consensus DE gene count, target-recovery fraction). Be explicit: this is a subset (a few cell lines, capped cells), so absence of reproducibility may reflect sampling; a per-cell scRNA DE is a proxy for drug effect confounded by dose/time; and correlation across lines measures consistency, not clinical efficacy. Reply in Korean unless asked otherwise.",
+    "readyFile": "validation_summary.csv",
+    "context": [
+      { "file": "composition.csv", "heading": "세포주×조건(약물/대조) 세포 수 (composition.csv)" },
+      { "file": "consensus_signature.csv", "heading": "컨센서스 약물 서명 — 세포주 평균 log2FC (consensus_signature.csv)" },
+      { "file": "de_by_cellline.csv", "heading": "세포주별 약물 vs DMSO 차등발현 (de_by_cellline.csv)" },
+      { "file": "reproducibility.csv", "heading": "세포주 쌍별 logFC 상관 — 재현성 (reproducibility.csv)" },
+      { "file": "target_recovery.csv", "heading": "알려진 표적 유전자 반응 (target_recovery.csv)" },
+      { "file": "validation_summary.csv", "heading": "재현성·표적 회복 독립 검증 지표·판정 (validation_summary.csv)" }
+    ],
+    "readyHint": "검증 결과가 없습니다. 먼저 2단계(GPU 재분석)와 3단계(독립 검증)를 실행해 validation_summary.csv 를 만들어 주세요.",
+    "easyReport": {
+      "label": "🎓 고등학생 버전 보고서",
+      "makeReport": "05_make_report.sh",
+      "title": "# 💊 같은 약, 여러 암에서 똑같이 들을까? — Tahoe-100M 약물 반응 이야기 (고등학생 쉬운 리포트)",
+      "datasetLabel": "이 튜토리얼(Vevo와 Arc Institute의 Tahoe-100M — 50개 암세포주에 1,100개 약을 처리해 만든 9,500만+ 세포 아틀라스 — 에서 약 하나를 골라 여러 암세포에서 GPU로 독립 재현·검증)",
+      "paperClaim": "Tahoe-100M(Vevo × Arc Institute)의 아이디어: 어떤 약이 세포에 무슨 일을 하는지 알려면 수많은 약을 수많은 암세포에 처리하고 세포 하나하나의 유전자 반응을 읽으면 된다. Vevo는 MOSAIC라는 대규모 방법으로 50개 암세포주에 ~1,100개 약을 처리해 9,500만+ 세포의 '약물 반응 대사전'을 만들어 공개했다. BioIDE는 이 거대한 사전 전체(1.69 TB)를 받지 않고, 관심 약물 하나와 아무 약도 안 준 대조(DMSO)만 골라 필요한 세포만 인터넷으로 스트리밍해 가져온다. 그런 다음 제공된 정답 라벨을 쓰지 않고 새로 짠 GPU 코드로 '이 약이 켜고 끄는 유전자'를 세포주마다 다시 찾아, (1) 여러 암세포에서 같은 결과가 나오는지(재현성)와 (2) 약이 원래 노리는 표적을 실제로 맞히는지를 검증한다."
+    },
+    "prompts": [
+      { "key": "reproduce", "label": "재현·기전 맞았나?", "q": "validation_summary.csv(세포주 간 평균 logFC 상관, 컨센서스 DE 유전자 수, 표적 회복 비율)를 근거로, 우리 독립 GPU 재분석이 이 약물의 '재현 가능하고 기전에 맞는' 전사체 서명을 재도출했는지 '재현/부분재현/불일치'로 판정해줘. 각 지표를 인용하고, 서브셋(세포주·세포 수 제한)이라 재현성 부족이 표본 문제일 수 있음을 감안해줘." },
+      { "key": "signature", "label": "약물 서명 해석", "q": "consensus_signature.csv·volcano.png를 근거로, 이 약물이 켜는/끄는 대표 유전자와 그 생물학적 의미(경로·기능)를 표로 제시해줘. 기본 약물이 Vorinostat(HDAC 억제제)이면 CDKN1A(p21) 유도·세포주기 억제 등 기대 반응과 실제 결과를 비교해줘." },
+      { "key": "reproducibility", "label": "세포주 간 재현성", "q": "reproducibility.csv·de_top_heatmap.png·reproducibility.png를 근거로, 이 약물의 서명이 여러 암세포주에서 얼마나 재현되는지 설명해줘. 재현성이 높은 유전자(공통 반응)와 세포주 특이적으로만 반응하는 유전자를 구분하고, 세포주 특이성이 driver 유전자 의존성·내성과 어떻게 연결될 수 있는지 가설을 제시해줘." },
+      { "key": "target", "label": "표적/기전 회복", "q": "target_recovery.csv·target_response.png를 근거로, 약물이 원래 노리는 표적 유전자들이 기대 방향으로 움직였는지 평가해줘. 표적이 잘 회복되면 우리 무라벨 재도출이 약물 기전을 맞힌 것이고, 아니라면 이유(간접 효과·표적이 전사 수준에서 안 변함·서브셋 한계)를 논의해줘." },
+      { "key": "hypothesis", "label": "가설·기여", "q": "독립 재분석과 검증을 종합해, (1) 검증 가능한 가설 3~5개(예: 특정 driver 유전자를 가진 세포주에서 이 약의 반응이 강함/약함, 공통 반응 유전자를 바이오마커로)와 (2) 이 접근(거대 약물 아틀라스에서 필요한 세포만 스트리밍해 GPU로 무라벨 재현)이 커뮤니티에 주는 기여를 서술해줘. 관찰과 가설을 분리하고 임상 효능 과장을 피해줘." },
+      { "key": "easy_report", "label": "🎓 고등학생 버전 보고서", "q": "이 분석(거대한 약물 아틀라스에서 약 하나와 대조만 골라 필요한 세포만 인터넷으로 가져와, 정답을 안 보고 새 GPU 코드로 '약이 켜고 끄는 유전자'를 여러 암세포에서 다시 찾고, 결과가 재현되는지·약이 표적을 맞히는지 검증)을 바탕으로 **고등학생도 이해할 '쉬운 리포트'**를 작성해줘. 규칙: (1) 전문용어는 쉬운 말로. (2) **일상 비유를 아주 많이** — 예: Tahoe-100M=약 1,100종을 암세포 50종에 다 발라 본 초대형 '약물 반응 사전', 약물 섭동=세포에 약을 줘서 반응을 보는 실험, DMSO 대조=아무 약도 안 준 '맹물' 비교군, 스트리밍 서브셋=백과사전 전체를 사지 않고 필요한 몇 쪽만 복사해 오기, 차등발현=약 준 세포와 안 준 세포의 유전자 '볼륨' 차이, 재현성=여러 반에서 같은 실험을 해도 같은 결과가 나오는지, 표적=약이 원래 겨냥한 과녁, HDAC 억제제=유전자 스위치를 덮어 둔 뚜껑을 열어 잠자던 유전자를 깨우는 약, 독립 재현=답지 안 보고 스스로 풀어 맞춰보기. 비유 6개 이상. (3) 순서: ① 왜 필요한 세포만 골라 왔는지 ② 약이 세포를 얼마나 바꿨는지 ③ 어떤 유전자가 켜지고 꺼졌는지 ④ 여러 암세포에서 같은 결과가 나왔는지(재현성) ⑤ 약이 표적을 맞혔는지 ⑥ 왜 흥미롭고 앞으로 무엇을(맞춤 항암제). (4) 친근한 말투, 순수 한국어. (5) 끝에 '💡 한 줄 요약'." }
+    ]
+  },
+  "help": {
+    "intro": "이 예제는 <b>Tahoe-100M</b>(Vevo Therapeutics × Arc Institute)을 활용합니다. Tahoe-100M은 <b>50개 암세포주</b>에 <b>~1,100개 약물</b>을 처리해 만든 <b>9,500만+ 세포</b>의 단일세포 <b>약물 섭동(perturbation)</b> 아틀라스로, ~14개 플레이트 h5ad(<b>~1.69 TB</b>)로 배포됩니다. 전체를 받는 것은 비현실적이라, 이 예제는 <b>관심 약물 하나</b>와 <b>DMSO 대조</b>를 몇 개 암세포주에 걸쳐 골라 <b>필요한 세포만 gcsfs로 스트리밍 추출</b>합니다. <b>BioIDE 헌장</b>에 따라 제공된 약물 반응 라벨을 쓰지 않고(제1조), 새로 짠 GPU 코드로 세포주별 <b>약물 vs DMSO 차등발현</b>을 재도출한 뒤, <b>세포주 간 재현성</b>과 <b>표적/기전 회복</b>을 검증합니다(제2조). ⚠ 이 파이프라인은 <b>초안(DRAFT)</b>입니다 — 데이터가 <b>Requester-Pays</b> 버킷에 있어 GCP 프로젝트(billing)와 gsutil/gcsfs 인증이 필요하고, 날짜 프리픽스·플레이트 h5ad 경로·바코드 형식은 첫 실행에서 확인해야 합니다.",
+    "steps": {
+      "setup": "GPU 분석 도구(Scanpy·PyTorch·Harmony·scikit-learn·pyarrow)와 <b>gcsfs</b>(플레이트 h5ad를 다운로드 없이 스트리밍), <b>gsutil</b>·GCP billing 프로젝트를 설치·확인합니다.",
+      "download": "작은 <b>메타데이터 parquet</b>를 받아 관심 <b>약물</b>(<code>TAHOE_DRUG</code>, 기본 Vorinostat)과 같은 플레이트·세포주의 <b>DMSO 대조</b> 세포를 선택하고, 각 <b>플레이트 h5ad</b>를 gcsfs backed 모드로 열어 선택된 세포 '행만' 스트리밍 추출해 작은 <code>tahoe_subset.h5ad</code>를 만듭니다. (전체 1.69 TB는 받지 않습니다.)",
+      "gpu": "<b>GPU 독립 재분석.</b> 서브셋 로드 → QC → 정규화 → HVG → <b>PyTorch GPU 스케일·PCA</b> → <b>Harmony</b>(세포주 통합) → Leiden → UMAP → <b>세포주별 약물 vs DMSO 차등발현</b> → <b>세포주 간 재현성</b>(logFC 상관) → <b>표적/기전 회복</b>.",
+      "validate": "<b>독립 검증(제2조).</b> 세포주 간 <b>logFC 상관</b>(재현성), 컨센서스 <b>DE 유전자 수</b>, 알려진 <b>표적 회복 비율</b>로 재현/부분재현/불일치를 판정합니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. 약물 서명·재현성·표적 회복을 해석하고 가설을 받습니다.",
+      "report": "독립 재분석 그림·검증 결과를 하나의 <b>PDF 보고서</b>로 정리합니다."
+    },
+    "glossary": [
+      { "term": "Tahoe-100M", "def": "Vevo Therapeutics가 <b>MOSAIC</b> 플랫폼으로 <b>50개 암세포주 × ~1,100개 약물</b>을 처리해 만든 <b>9,500만+ 세포</b> 단일세포 약물 섭동 아틀라스. Arc Virtual Cell Atlas의 첫 기여 데이터셋으로, 약물이 암세포의 유전자 발현을 어떻게 바꾸는지 대규모로 기록합니다." },
+      { "term": "약물 섭동 (perturbation)", "def": "세포에 <b>약물을 처리해 반응을 관찰</b>하는 실험. 대조군(DMSO)과 비교해 약이 어떤 유전자를 켜고 끄는지 알아냅니다." },
+      { "term": "DMSO 대조", "def": "약물을 녹이는 <b>용매(vehicle)</b>만 처리한 대조군. 약물군과 DMSO군의 차이가 순수한 <b>약물 효과</b>입니다. Tahoe에서는 drug 컬럼이 DMSO로 표시됩니다." },
+      { "term": "스트리밍 서브셋 (gcsfs backed)", "def": "거대한 플레이트 h5ad(~120 GB)를 <b>내려받지 않고</b>, 클라우드에서 <b>필요한 세포 행만</b> 읽어 오는 방법. 1.69 TB 아틀라스를 워크스테이션에서 쓰게 해 주는 핵심 기술입니다." },
+      { "term": "차등발현 (DE, log2FC)", "def": "약물군 vs 대조군에서 각 유전자의 발현이 몇 배 달라졌는지(<b>log2 fold-change</b>)와 통계적 유의성. 약물의 '전사체 서명'을 만듭니다." },
+      { "term": "세포주 간 재현성", "def": "같은 약물이 <b>여러 암세포주</b>에서 <b>같은 유전자를 같은 방향으로</b> 바꾸는지. 유전자별 logFC의 상관으로 정량하며, 높으면 세포주 특이 잡음이 아닌 <b>진짜 약물 효과</b>입니다." },
+      { "term": "표적/기전 회복", "def": "약이 원래 노리는 <b>표적 유전자</b>(drug_metadata의 targets·moa-fine)가 기대 방향으로 움직였는지. 우리 무라벨 재도출이 약물의 <b>작용 기전</b>을 맞혔는지 확인합니다." },
+      { "term": "HDAC 억제제 (기본 약물 Vorinostat)", "def": "히스톤 탈아세틸화효소(HDAC)를 막아 <b>유전자 스위치를 여는</b> 항암제. 광범위한 전사 재편과 CDKN1A(p21) 유도·세포주기 억제 같은 <b>강하고 재현성 높은 서명</b>을 만들어 데모용 기본값으로 적합합니다." },
+      { "term": "독립 재현 (헌장 제1조)", "def": "제공된 약물 반응 라벨을 쓰지 않고, 카운트에서 <b>우리 코드로 약물 반응을 처음부터 다시</b> 계산해 재현성·기전을 확인하는 것." }
+    ]
+  }
+}
