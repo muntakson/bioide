@@ -1,0 +1,125 @@
+{
+  "id": "pd1-resistant-nsclc-h1299",
+  "name": "PD-1 내성 폐암 세포주 (H1299-P3) 독립재현",
+  "summary": "충남대 박상민 교수가 GHBIO에 제출한 통합분석 보고서(H1299-P3 anti-PD-1 내성)를 count matrix에서 처음부터 독립 재도출하여 결론의 재현성을 정량 검증 (BioIDE 헌장 제1·2조). 저자의 fold change·padj를 쓰지 않고 자체 정규화·DE·GSEA로 XYLT1/S100A16/GALNT6 등 핵심 타깃과 'Inflamed but Suppressed' 프로그램을 다시 도출·대조.",
+  "dataSource": {
+    "provider": "GHBIO LLMwiki (사내 /intranet) — 제출 자료",
+    "dataset": "H1299-hPBMC anti-PD-1 내성 모델 mRNA-Seq isoform 리포트 (박인선, 2024-10-02). NIG-ΔMHC(MHC-tKO NIG) 마우스 + 인간화 PBMC 이식 종양, GRCh38, TMM+CPM. P0=parental / P3=옵디보 3회 반복 선별 내성. TC=vehicle, TD=anti-PD-1.",
+    "datasetUrl": "https://rna.bioide.org",
+    "size": "180,043 isoform × 6 samples (~78 MB xlsx) · Raw counts + normalized log2 + annotation",
+    "note": "FASTQ가 아니라 이미 라벨된 count matrix에서 시작합니다. 샘플: P0_TC1/2(민감·대조), P0_TD(민감·약물), P3_TC1/2(내성·대조), P3_TD(내성·약물). 핵심 비교는 P3C/P0C(내성 획득). 제출 보고서는 이 조직(tissue) 전사체 + 별도 PacBio 세포주 전사체를 교차검증했으나, 여기서는 제공된 조직 count matrix만으로 독립 재현합니다 — PacBio 교차검증·단백질 확인(WB)은 재현 범위 밖임을 명시합니다. 원본 xlsx는 LLMwiki의 PD-1 폴더에서 자동 탐색합니다(환경변수 PD1_XLSX 로 경로 지정 가능).",
+    "download": {
+      "tar": "~/ghbio-tutorial/data/pd1-h1299/mRNA-Seq_isoform_report.xlsx",
+      "totalBytes": 78349002,
+      "extracted": "~/ghbio-tutorial/data/pd1-h1299/counts_gene.csv"
+    }
+  },
+  "deepModule": true,
+  "figures": [
+    {
+      "file": "qc_pca.png",
+      "title": "QC. 샘플 PCA / 상관",
+      "easy": "6개 시료를 성분분석(PCA)으로 2차원에 찍은 그림입니다. 민감주(P0)와 내성주(P3)가 좌우로 나뉘면, 내성 획득으로 전사체가 크게 바뀌었다는 뜻입니다.",
+      "detailed": "유전자 수준 raw counts를 CPM·log2 변환·상위 가변유전자로 PCA한 그림과 시료간 Pearson 상관 히트맵. P0(민감) vs P3(내성)이 PC1에서 분리되면 내성 획득이 전사체의 주된 변이축임을 확인합니다. 소규모 반복(n=2/2)의 시료 품질·군집성 점검용."
+    },
+    {
+      "file": "volcano_p3c_vs_p0c.png",
+      "title": "P3C vs P0C 화산도 (내성 획득 DE)",
+      "easy": "내성 세포(P3)와 민감 세포(P0)를 비교해, 오른쪽 위로 갈수록 '내성에서 강하게 켜진' 유전자입니다. 보고서의 핵심 타깃들이 여기 표시됩니다.",
+      "detailed": "P3C vs P0C 차등발현 화산도. x=log2 fold change, y=-log10 p(limma형 경험적 베이즈 moderated t). XYLT1·S100A16·GALNT6·ARG2·SLCO1B3·NDRG1 등 보고서가 지목한 종양세포-내재적 타깃을 라벨링해, 저자 라벨 없이도 동일 유전자가 상위에 재도출됨을 보입니다."
+    },
+    {
+      "file": "targets_vs_report.png",
+      "title": "핵심 타깃 — 독립재현 FC vs 보고서 FC",
+      "easy": "우리가 직접 계산한 fold change와 보고서가 적어 낸 값이 얼마나 일치하는지 나란히 본 그림입니다. 점들이 대각선에 가까울수록 잘 재현된 것입니다.",
+      "detailed": "보고서 Tier1~2 및 대표 유전자의 log2FC(조직 P3C/P0C)를 독립 재계산값과 산점도·막대로 대조. 부호 일치율과 Pearson 상관을 함께 표기. XYLT1은 P0C 발현이 거의 0이라 정규화 방식에 따라 크기 차가 크지만 방향은 일치하는 등, 재현의 강건성과 한계를 동시에 보여줍니다."
+    },
+    {
+      "file": "cat_a_heatmap.png",
+      "title": "종양세포-내재적(Cat.A 후보) 타깃 히트맵",
+      "easy": "보고서의 1순위 종양세포 타깃들이 내성 세포(P3)에서 실제로 더 진하게 켜지는지 6개 시료에 걸쳐 색으로 본 그림입니다.",
+      "detailed": "보고서 Cat.A 대표 타깃(ECM/GAG·glycosylation·plasticity·대사·신호 축)의 log2CPM z-score 히트맵(행=유전자, 열=시료). P3_TC 시료에서 일관되게 상향되는 패턴으로, 종양세포-내재적 상승 프로그램을 독립적으로 재현합니다."
+    },
+    {
+      "file": "gsea_hallmark.png",
+      "title": "Hallmark GSEA (프로그램 방향 재현)",
+      "easy": "유전자를 팀(경로)으로 묶어 어느 팀이 내성에서 더 활발해졌는지/약해졌는지 본 그림입니다. 보고서가 말한 방향(염증↑, EMT↓, 증식↑)과 맞는지 확인합니다.",
+      "detailed": "P3C/P0C 순위 리스트에 대한 preranked GSEA의 Hallmark NES 막대. 보고서 주장(IFN-γ/α Response↑, E2F Targets·G2M Checkpoint↑, EMT↓, Notch·Hedgehog↓)을 방향·유의성으로 대조. 'Inflamed but Suppressed'와 classical EMT가 아닌 lineage plasticity 해석의 전사체 근거를 재현합니다."
+    },
+    {
+      "file": "drug_response_patterns.png",
+      "title": "약물반응 패턴 (REVERSED/CONSTITUTIVE/LOST-INDUCTION)",
+      "easy": "anti-PD-1 약을 줬을 때 민감 세포(P0)와 내성 세포(P3)의 반응이 어떻게 달라졌는지 유형별로 나눈 그림입니다.",
+      "detailed": "P0의 약물효과(P0D-P0C)와 P3의 약물효과(P3D-P3C)를 유전자별로 비교해 REVERSED/CONSTITUTIVE/LOST-INDUCTION 패턴을 분류(약물군 n=1의 정성적 재현). XYLT1의 REVERSED, S100A16의 CONSTITUTIVE, 면역유전자의 LOST-INDUCTION 등 보고서 패턴을 대조합니다."
+    },
+    {
+      "file": "validation_bars.png",
+      "title": "독립재현 판정 지표",
+      "easy": "보고서 결론이 얼마나 재현됐는지 한눈에 보는 점수판입니다. 막대가 높을수록 잘 재현된 것입니다.",
+      "detailed": "타깃 방향 일치율, 독립 FC vs 보고서 FC 상관, Cat.A 후보 유의성 회복률, Hallmark GSEA 방향 일치율을 막대로 요약하고 종합 판정(AGREE/PARTIAL)을 표기합니다."
+    }
+  ],
+  "steps": [
+    { "id": "setup", "title": "0. Setup Python env (통계 스택)", "ko": "분석 환경(pandas/scipy/statsmodels/openpyxl) 확인·설치", "kind": "task", "run": "bash 00_setup_env.sh", "presentPath": "~/ghbio-venv/bin/python" },
+    { "id": "prepare", "title": "1. Count matrix 준비 (isoform→gene)", "ko": "LLMwiki PD-1 xlsx 자동 탐색 → isoform 합산 → 유전자 raw counts·CPM·시료 메타 생성 + QC", "kind": "task", "run": "~/ghbio-venv/bin/python 01_prepare_matrix.py", "produces": ["counts_gene.csv", "logcpm_gene.csv", "samples.csv", "qc_pca.png", "prepare_summary.txt"] },
+    { "id": "de", "title": "2. 차등발현 P3C vs P0C (내성 획득)", "ko": "자체 정규화 + limma형 moderated t-test로 P3C/P0C DE + 약물반응 패턴", "kind": "task", "run": "~/ghbio-venv/bin/python 02_de_p3c_vs_p0c.py", "produces": ["de_p3c_vs_p0c.csv", "drug_response.csv", "volcano_p3c_vs_p0c.png", "drug_response_patterns.png"] },
+    { "id": "targets", "title": "3. 핵심 타깃·기능축 재도출", "ko": "보고서 Tier1~2 타깃과 기능축(ECM/GAG·glycan·plasticity·대사)을 독립 FC로 대조", "kind": "task", "run": "~/ghbio-venv/bin/python 03_targets_and_axes.py", "produces": ["target_reproduction.csv", "targets_vs_report.png", "cat_a_heatmap.png"] },
+    { "id": "gsea", "title": "4. Hallmark GSEA (프로그램 방향)", "ko": "P3C/P0C 순위 리스트로 preranked GSEA → IFN↑·EMT↓·증식↑ 방향 재현", "kind": "task", "run": "~/ghbio-venv/bin/python 04_gsea_hallmark.py", "produces": ["gsea_hallmark.csv", "gsea_hallmark.png"] },
+    { "id": "validate", "title": "5. 독립재현 판정 — 보고서 대조", "ko": "타깃 방향 일치율·FC 상관·유의성 회복·GSEA 방향 일치로 재현/부분재현 판정 (헌장 제1·2조)", "kind": "task", "run": "~/ghbio-venv/bin/python 05_validate_vs_report.py", "produces": ["validation_summary.csv", "validation_verdict.txt", "validation_bars.png"] },
+    { "id": "ai", "title": "6. AI analysis & 판정 해석", "ko": "AI 해석·판정 (채팅 아님, 단발 패널)", "kind": "ai" },
+    { "id": "report", "title": "7. Generate PDF report", "ko": "DE·GSEA·독립재현 판정을 하나의 PDF로", "kind": "task", "run": "bash 06_make_report.sh", "produces": ["GHBIO_pd1_h1299_report.pdf"] }
+  ],
+  "ai": {
+    "system": "You are the BioIDE AI Co-Scientist for an INDEPENDENT REPRODUCTION of a bioinformatics report submitted to GHBIO by Prof. 박상민 (Chungnam National University, Daejeon). The report integrates a tissue transcriptome and a PacBio cell-line transcriptome of an anti-PD-1-resistant human NSCLC model (H1299-P3, from a humanized-PBMC NIG-ΔMHC xenograft; P0=parental/sensitive, P3=nivolumab-selected/resistant; TC=vehicle, TD=anti-PD-1). Its thesis: acquired anti-PD-1 resistance is driven by SIMULTANEOUS tumor-cell-intrinsic barrier programs — ECM/GAG fortification (XYLT1, driver; SDC1/HS3ST3B1 support), surface glycan shield (GALNT6 → PD-L1 stabilization + STING block), lineage plasticity via tight-junction dissolution (S100A16 → ZO-2 degradation; NOTE: this is NOT classical EMT — Hallmark EMT is DOWN), metabolic immunosuppression (ARG2), and apoptotic priming (PMAIP1/NOXA → MCL-1 dependence) — on a background of down-regulated Notch/Hedgehog developmental programs and up-regulated proliferation (E2F/G2M). The TME is 'Inflamed but Suppressed' (IFN-γ/α Response UP but antigen-presentation drug response LOST). The 4-Category framework (A tumor-intrinsic / B TME-derived / C cell-line-specific / D mixed) needs BOTH datasets; here we reproduce only the TISSUE side (the provided count matrix) and must be explicit that PacBio cross-validation and protein-level (WB) confirmation are OUT of reproduction scope. Interpret the provided DE tables, GSEA and reproduction metrics honestly; state clearly which of the report's claims the count matrix independently reproduces and which it cannot. Separate observation from hypothesis; avoid clinical overstatement. Reply in Korean unless asked otherwise.",
+    "readyFile": "de_p3c_vs_p0c.csv",
+    "context": [
+      { "file": "validation_summary.csv", "heading": "제출 보고서 대비 독립재현 지표·판정 (validation_summary.csv)" },
+      { "file": "target_reproduction.csv", "heading": "보고서 핵심 타깃 독립재현 대조 (target_reproduction.csv)" },
+      { "file": "de_p3c_vs_p0c.csv", "heading": "P3C vs P0C 차등발현 상위 유전자 (de_p3c_vs_p0c.csv, top by |t|)", "topByRank": 40 },
+      { "file": "gsea_hallmark.csv", "heading": "Hallmark GSEA 결과 (gsea_hallmark.csv)" },
+      { "file": "drug_response.csv", "heading": "약물반응 패턴 (drug_response.csv)" }
+    ],
+    "readyHint": "결과가 없습니다. 먼저 1~5단계(행렬 준비·DE·GSEA·검증)를 실행해 de_p3c_vs_p0c.csv / validation_summary.csv 를 만들어 주세요.",
+    "easyReport": {
+      "label": "🎓 고등학생 버전 보고서",
+      "makeReport": "06_make_report.sh",
+      "title": "# 🔬 내성 암세포 이야기 — 고등학생 쉬운 리포트",
+      "datasetLabel": "이 재현 분석(H1299-P3 anti-PD-1 내성 폐암 세포주 전사체)",
+      "paperClaim": "제출 보고서(충남대 박상민 교수, H1299-P3 PD-1 내성 폐암 통합분석)의 핵심 주장: 면역항암제(anti-PD-1)에 대한 내성은 하나의 원인이 아니라, 암세포가 스스로 세운 여러 겹의 '방어벽'이 동시에 작동한 결과다. (1) 암세포 주변에 당사슬(GAG)로 촘촘한 그물망(ECM 장벽)을 쳐서 면역세포(T세포)가 물리적으로 못 들어오게 막는다 — 그 첫 삽을 뜨는 효소가 XYLT1이다. (2) 세포 표면에 당(glycan) 방패를 둘러(GALNT6) 면역 신호를 가린다. (3) 세포 사이 접착을 풀어 정체성을 바꾼다(S100A16) — 단, 이것은 전형적인 EMT가 아니다. (4) 아르기닌이라는 영양분을 먹어치워(ARG2) T세포를 굶긴다. 흥미롭게도 종양 안에는 면역세포가 있고 염증 신호도 켜져 있지만(Inflamed), 그 힘이 억눌려 있어(Suppressed) 공격으로 이어지지 못한다. 따라서 암세포의 방어벽을 허물면 이미 와 있는 면역세포가 다시 힘을 낼 수 있다는 것이 핵심 가설이다. 이 보고서를 우리가 저자의 답을 보지 않고 원자료(count matrix)에서 처음부터 다시 계산해 '정말 그런지' 검증했다."
+    },
+    "prompts": [
+      { "key": "verdict", "label": "독립재현 판정 해석", "q": "validation_summary.csv와 target_reproduction.csv의 지표(타깃 방향 일치율, 독립 FC vs 보고서 FC 상관, Cat.A 유의성 회복, Hallmark GSEA 방향 일치)를 근거로, 박상민 교수 보고서의 핵심 주장이 이 count matrix에서 독립적으로 재현되는지 판정해줘. 재현된 부분과, 이 데이터만으로는 재현 불가한 부분(PacBio 교차검증·단백질 WB·Cat.A/B 구분)을 명확히 구분해 표로 정리해줘." },
+      { "key": "interpret", "label": "Interpret DE result", "q": "P3C vs P0C 차등발현 상위 유전자를 근거로 내성 획득 시 종양세포에서 켜지고 꺼지는 프로그램(ECM/GAG, glycan, plasticity, 대사, 증식, 발달경로)을 해석하고, 각 결론의 근거 유전자와 confidence를 표로 제시해줘." },
+      { "key": "gsea", "label": "Interpret GSEA", "q": "Hallmark GSEA 결과를 바탕으로 P3 전사체 상태를 요약해줘. IFN 반응↑, EMT↓, Notch/Hedgehog↓, E2F/G2M↑ 방향이 각각 무엇을 뜻하는지, 'Inflamed but Suppressed'와 'classical EMT가 아닌 lineage plasticity' 해석이 전사체 수준에서 타당한지 평가해줘." },
+      { "key": "hypothesis", "label": "Testable hypotheses", "q": "재현된 결과를 근거로 검증 가능한 가설 3~5개를 제시해줘. 각 가설마다 근거, 예측, 검증 방법(P0/P3 WB, siRNA KD, PBMC 공배양, in vivo 4군), 그리고 임상적 과장을 피하기 위한 조건을 적어줘." },
+      { "key": "easy_report", "label": "🎓 고등학생 버전 보고서", "q": "이 분석 결과(P3 내성 세포에서 켜진/꺼진 유전자 프로그램과 보고서 재현 판정)를 바탕으로 **고등학생도 쉽게 이해할 수 있는 '쉬운 리포트'**를 작성해줘. 규칙: (1) 전문용어는 반드시 쉬운 말로 풀어 설명한다. (2) **일상 비유를 아주 많이** 사용한다 — 예: 유전자 발현=공장의 생산량, 내성 획득=적의 공격을 견디도록 요새를 세운 것, ECM 장벽=성벽, T세포=성을 공격하는 군대, GSEA=여러 유전자를 팀으로 묶어 어느 팀이 활발한지 보기, 독립재현=친구의 계산을 답을 안 보고 다시 풀어 맞는지 확인하기. 비유는 최소 6개 이상 자연스럽게 녹여 쓴다. (3) 순서: ① 무엇을 왜 했는지(제출 보고서 검증) ② 내성 세포에서 어떤 유전자가 켜지고 꺼졌는지 ③ 그것이 왜 면역치료를 무력화하는지 ④ 우리가 보고서를 얼마나 재현했는지와 앞으로 무엇을 더 확인해야 하는지. (4) 어려운 표·숫자는 최소화하고 친근하고 격려하는 말투로 순수 한국어로 쓴다. (5) 맨 끝에 '💡 한 줄 요약'을 넣는다. 제목은 '# 🔬 내성 암세포 이야기 — 고등학생 쉬운 리포트'로 시작한다." }
+    ]
+  },
+  "help": {
+    "intro": "이 예제는 <b>충남대학교 박상민 교수</b>가 GHBIO에 제출한 <b>H1299-P3 PD-1 내성 폐암 통합분석 보고서</b>를 <b>독립적으로 재현</b>합니다. 보고서는 <b>조직 전사체(short-read mRNA-Seq)</b>와 <b>PacBio 세포주 전사체</b>를 교차검증해 내성 타깃을 4-Category(A 종양세포-내재적 / B TME / C 세포주고유 / D 혼합)로 분류했습니다. 여기서는 제공된 <b>조직 count matrix</b>만으로 저자의 fold change·padj를 <b>쓰지 않고</b> 자체 정규화·차등발현·GSEA를 다시 수행해, <b>XYLT1·S100A16·GALNT6·ARG2</b> 등 핵심 타깃과 <b>'Inflamed but Suppressed'</b>·<b>lineage plasticity(≠classical EMT)</b> 해석이 재현되는지 정량 판정합니다. FASTQ가 아니라 <b>이미 라벨된 count matrix</b>에서 시작합니다. PacBio 교차검증과 단백질 확인(WB)은 재현 범위 밖임을 명시합니다.",
+    "steps": {
+      "setup": "분석에 필요한 파이썬 통계 스택(pandas·numpy·scipy·statsmodels·matplotlib·openpyxl)을 확인·설치합니다. 다른 예제와 <b>같은 venv</b>를 재사용하므로 이미 있으면 즉시 끝납니다.",
+      "prepare": "LLMwiki의 <b>PD-1 폴더에서 mRNA-Seq isoform xlsx</b>를 자동으로 찾아, 180,043개 <b>isoform을 유전자 단위로 합산</b>해 raw counts 행렬을 만들고 CPM·log2 변환합니다. 시료 6개(P0_TC1/2, P0_TD, P3_TC1/2, P3_TD)를 군(P0C/P0D/P3C/P3D)으로 라벨하고, PCA·상관으로 품질을 점검합니다.",
+      "de": "저자 결과를 보지 않고 <b>자체 정규화 + limma형 경험적 베이즈 moderated t-test</b>로 <b>P3C vs P0C(내성 획득)</b> 차등발현을 계산합니다. n=2/2의 한계를 분산 공유(moderation)로 보완합니다. 더불어 약물군(P0D/P3D, n=1)으로 REVERSED/CONSTITUTIVE/LOST-INDUCTION 약물반응 패턴을 정성적으로 재현합니다.",
+      "targets": "보고서가 지목한 <b>Tier1~2 타깃</b>(XYLT1/S100A16/GALNT6/ARG2 등)과 기능축(ECM/GAG·glycosylation·plasticity·대사)을 <b>독립 재계산 fold change</b>로 대조합니다. 우리 FC vs 보고서 FC의 <b>부호 일치율·상관</b>과, Cat.A 후보 히트맵을 만듭니다.",
+      "gsea": "P3C/P0C 순위 리스트에 대해 <b>preranked GSEA</b>(내장 Hallmark 세트, 인터넷 불필요)를 돌려, 보고서 주장(<b>IFN-γ/α↑, E2F/G2M↑, EMT↓, Notch/Hedgehog↓</b>)의 <b>방향·유의성</b>을 재현합니다.",
+      "validate": "<b>독립재현 판정(헌장 제1·2조).</b> 타깃 방향 일치율, 독립 FC vs 보고서 FC 상관, Cat.A 후보 유의성 회복률, Hallmark 방향 일치율을 종합해 <b>AGREE/PARTIAL</b>을 판정하고 근거 지표를 표·막대로 정리합니다.",
+      "ai": "이 단계를 누르면 <b>AI 분석 창</b>이 열립니다. DE·GSEA·<b>독립재현 지표</b>를 해석하고, 보고서의 어떤 주장이 재현되고 무엇이 추가 데이터(PacBio·WB)를 요하는지 판정을 받습니다.",
+      "report": "DE·GSEA·독립재현 판정을 하나의 <b>PDF 보고서</b>로 정리합니다."
+    },
+    "glossary": [
+      { "term": "P0 / P3, TC / TD", "def": "<b>P0</b>=anti-PD-1 처리 이전 민감(parental) 상태, <b>P3</b>=anti-PD-1 3회 반복 선별 후 내성 상태. <b>TC</b>=vehicle(대조), <b>TD</b>=anti-PD-1(약물). 핵심 비교 <b>P3C/P0C</b>(P3_TC vs P0_TC)가 '내성 획득 그 자체의 변화'를 반영합니다." },
+      { "term": "독립재현 (Independent reproduction)", "def": "제출된 보고서의 결론(fold change·padj·타깃 목록)을 <b>그대로 믿지 않고</b>, 원자료(count matrix)에서 <b>처음부터 다시 계산</b>해 같은 결론이 나오는지 확인하는 것입니다. BioIDE 헌장 제1·2조 — 저자 라벨·결과를 소비하지 않고 재도출합니다." },
+      { "term": "moderated t-test (limma eBayes)", "def": "반복수가 적을 때(n=2) 유전자마다 분산을 따로 추정하면 불안정합니다. 전체 유전자의 분산 정보를 빌려와(경험적 베이즈) 각 유전자의 분산을 <b>사전분포 쪽으로 수축</b>시키면 검정력이 크게 좋아집니다. limma 패키지의 핵심 방법을 자체 구현했습니다." },
+      { "term": "GSEA / NES", "def": "개별 유전자가 아니라 <b>유전자 세트(경로)</b> 단위로, 순위 리스트의 위/아래에 몰려 있는지 보는 분석입니다. <b>NES</b>(normalized enrichment score)가 양수면 P3에서 상향, 음수면 하향. Hallmark은 MSigDB의 대표 50개 프로그램 세트입니다." },
+      { "term": "Inflamed but Suppressed", "def": "종양에 면역세포가 있고 IFN 등 <b>염증 신호도 켜져(Inflamed)</b> 있지만, 항원제시·활성화 반응이 소실되어 <b>실제 공격으로 이어지지 못하는(Suppressed)</b> 역설적 상태. '면역세포가 없어서'가 아니라 '억눌려서' 내성이 생겼다는 해석의 근거입니다." },
+      { "term": "classical EMT가 아닌 lineage plasticity", "def": "S100A16이 세포 접착(ZO-2)을 풀지만, 전형적 상피-간엽 전환(EMT) 마커(ZEB1/SNAI2/FN1↑)는 오히려 감소하고 상피 마커는 상승합니다. 즉 간엽으로의 전환이 아니라 <b>발달경로(Notch/Hh) 약화로 정체성이 재편되는 탈분화</b>에 가깝습니다." }
+    ]
+  },
+  "todo": [
+    { "label": "분석 환경 설치 — 0단계(00_setup_env.sh) 실행", "check": "~/ghbio-venv/bin/python" },
+    { "label": "Count matrix 준비 — 1단계 실행 (isoform→gene)", "check": "~/ghbio-tutorial/data/pd1-h1299/counts_gene.csv" },
+    { "label": "차등발현·GSEA — 2~4단계 실행", "check": "~/ghbio-workspace/projects/pd1-resistant-nsclc-h1299/results/gsea_hallmark.csv" },
+    { "label": "독립재현 판정 — 5단계 실행 (validation_verdict.txt)", "check": "~/ghbio-workspace/projects/pd1-resistant-nsclc-h1299/results/validation_verdict.txt" }
+  ]
+}

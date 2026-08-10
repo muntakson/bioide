@@ -13,3 +13,6 @@ third_party/
 
 # large paper PDFs — kept local, not tracked
 *.pdf
+
+# GHBIO submitted source data (lives in the LLMwiki, not git)
+/PD-1/
