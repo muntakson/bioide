@@ -30,7 +30,7 @@ import { pipelineDraftsDir } from "./util"
 
 const DEFAULT_MODELS: Record<string, string[]> = {
   anthropic: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
-  groq: ["llama-3.3-70b-versatile"],
+  groq: ["openai/gpt-oss-120b"],
   openrouter: ["anthropic/claude-sonnet-4", "deepseek/deepseek-chat"],
   deepseek: ["deepseek-chat", "deepseek-reasoner"],
 }

@@ -8,7 +8,7 @@ import { AiConfig, AiPromptSpec, EasyReportSpec, SurveySpec, loadModules, findPi
 // Fallback models when a module doesn't pin its own.
 const DEFAULT_MODELS: Record<string, string[]> = {
   anthropic: ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
-  groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+  groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
   openrouter: ["anthropic/claude-sonnet-4", "deepseek/deepseek-chat", "google/gemini-2.0-flash-001"],
   deepseek: ["deepseek-chat", "deepseek-reasoner"],
 }

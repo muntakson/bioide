@@ -331,5 +331,64 @@
         "def": "다른 알고리즘·언어·하드웨어로도 같은 생물학적 결론에 도달하는지를 시험하는 검증 개념."
       }
     ]
+  },
+  "codelab": {
+    "label": "코드랩 — HNSCC p-EMT GPU 재분석",
+    "title": "Puram 2017 두경부암 p-EMT GPU 단일세포 코드랩",
+    "subtitle": "이 재현 파이프라인의 실제 GPU 파이썬 분석 코드를 단계별로 보고, BioIDE 서버(또는 Google Colab)에서 직접 실행해 보세요.",
+    "intro": "원 논문(**Puram et al., Cell 2017**, GSE103322)은 두경부 편평세포암(HNSCC) 환자 18명의 단일세포 5,902개를 Smart-seq2로 읽어, 세포외기질 단백질은 켜지만 전형적 EMT 전사인자는 없는 **부분 상피-간엽 이행(p-EMT)** 프로그램이 종양 가장자리 악성세포에 국재하며 림프절 전이·나쁜 예후를 예측함을 보였습니다. 이 코드랩은 **동일한 GPU 알고리즘**을 어디서나 바로 받을 수 있는 공개 10x **PBMC 3k** 데이터에 적용해 그대로 실행할 수 있게 구성했습니다. **BioIDE 서버에서 실행**하면 이 박스의 GPU와 `ghbio-venv` 커널을 그대로 사용하고, **Colab에서 실행**하면 GPU 런타임을 켠 뒤(런타임 → 런타임 유형 변경 → GPU) 돌립니다. 전체 파이프라인은 같은 알고리즘을 논문의 실제 데이터(**GSE103322**)에 적용합니다.",
+    "colabUrl": "",
+    "notebook": "puram-2017-hnscc-pemt-reproduction_codelab.ipynb",
+    "cells": [
+      {
+        "title": "라이브러리 준비 (필요할 때만 설치)",
+        "desc": "**BioIDE 서버에서 실행**하면 모든 라이브러리가 이미 설치되어 있어 이 셀은 아무것도 설치하지 않습니다(공유 환경 보호). **Colab에서 실행**할 때만 빠진 패키지를 설치합니다.",
+        "code": "import importlib.util, subprocess, sys\nneed = [pip for pip, mod in [(\"scanpy\",\"scanpy\"),(\"torch\",\"torch\"),(\"leidenalg\",\"leidenalg\"),(\"python-igraph\",\"igraph\"),(\"scikit-misc\",\"skmisc\")] if importlib.util.find_spec(mod) is None]\nif need:\n    print(\"설치:\", need); subprocess.run([sys.executable, \"-m\", \"pip\", \"install\", \"-q\", *need], check=True)\nelse:\n    print(\"모든 라이브러리가 이미 설치되어 있습니다 — 설치를 건너뜁니다.\")"
+      },
+      {
+        "title": "라이브러리 불러오기 · GPU 확인",
+        "code": "import numpy as np, pandas as pd\nimport scanpy as sc, torch\nfrom scipy import sparse\n\ndevice = torch.device(\"cuda\" if torch.cuda.is_available() else \"cpu\")\nprint(\"장치:\", device, \"|\", torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"CPU\")\nsc.settings.verbosity = 1\nnp.random.seed(2017); torch.manual_seed(2017)"
+      },
+      {
+        "title": "① GPU LogNormalize (Seurat NormalizeData)",
+        "desc": "Seurat의 `NormalizeData(LogNormalize)` 를 GPU로 이식합니다. `log1p(0)==0` 이라 희소성(sparsity)을 유지하며 비영(non-zero) 값만 변환합니다 — 재현 파이프라인의 정규화 단계와 동일한 방식입니다.",
+        "code": "def gpu_lognormalize(counts, device, scale_factor=1e4):\n    counts = counts.tocsr().astype(np.float32)\n    totals = np.asarray(counts.sum(axis=1)).ravel()\n    totals[totals == 0] = 1.0\n    row_of_nnz = np.repeat(np.arange(counts.shape[0]), np.diff(counts.indptr))\n    data = torch.from_numpy(counts.data).to(device)\n    factor = torch.from_numpy((scale_factor / totals).astype(np.float32)).to(device)\n    normalized = torch.log1p(data * factor[torch.from_numpy(row_of_nnz).to(device)])\n    out = counts.copy(); out.data = normalized.cpu().numpy()\n    return out"
+      },
+      {
+        "title": "② GPU ScaleData + PCA (SVD)",
+        "desc": "`ScaleData`(평균 0·분산 1·clip)와 `RunPCA`(SVD로 scores = U·S)를 GPU에서 수행합니다.",
+        "code": "def gpu_scale(matrix, device, scale_max=10.0):\n    x = torch.from_numpy(np.ascontiguousarray(matrix, dtype=np.float32)).to(device)\n    mean = x.mean(0, keepdim=True); std = x.std(0, unbiased=True, keepdim=True)\n    std = torch.where(std == 0, torch.ones_like(std), std)\n    return torch.clamp((x - mean) / std, max=scale_max)\n\ndef gpu_pca(scaled, n_comps=50):\n    scaled = scaled - scaled.mean(0, keepdim=True)\n    u, s, _ = torch.linalg.svd(scaled, full_matrices=False)\n    return (u[:, :n_comps] * s[:n_comps]).cpu().numpy()"
+      },
+      {
+        "title": "③ 데이터 불러오기 & QC 필터",
+        "desc": "공개 10x **PBMC 3k** 데이터를 불러와 Seurat식 QC 필터를 적용합니다. (원 논문은 Smart-seq2 TPM 행렬을 쓰지만, 여기서는 알고리즘 흐름을 그대로 보이기 위해 공개 대체 데이터를 사용합니다. 임계값은 이 데이터셋에 맞춘 값입니다.)",
+        "code": "adata = sc.datasets.pbmc3k()\nadata.var_names_make_unique()\nadata.layers[\"counts\"] = adata.X.copy()\nadata.obs[\"nCount_RNA\"] = np.asarray(adata.X.sum(1)).ravel()\nadata.obs[\"nFeature_RNA\"] = np.asarray((adata.X > 0).sum(1)).ravel()\nadata = adata[(adata.obs.nFeature_RNA > 200) & (adata.obs.nCount_RNA > 500)].copy()\nprint(f\"QC 통과 세포: {adata.n_obs:,}, 유전자: {adata.n_vars:,}\")"
+      },
+      {
+        "title": "④ 정규화 · 고변동 유전자(HVG)",
+        "code": "adata.X = gpu_lognormalize(adata.layers[\"counts\"], device)\nsc.pp.highly_variable_genes(adata, flavor=\"seurat_v3\", n_top_genes=2000, layer=\"counts\")\nhvg = np.where(adata.var[\"highly_variable\"].to_numpy())[0]\nprint(\"고변동 유전자:\", len(hvg))"
+      },
+      {
+        "title": "⑤ ScaleData · PCA (GPU)",
+        "code": "dense_hvg = np.asarray(adata.X[:, hvg].todense())\nscaled = gpu_scale(dense_hvg, device)\nadata.obsm[\"X_pca\"] = gpu_pca(scaled, n_comps=50)\ndel dense_hvg, scaled\nprint(\"PCA:\", adata.obsm[\"X_pca\"].shape)"
+      },
+      {
+        "title": "⑥ 이웃 그래프 · Leiden 군집 · UMAP",
+        "code": "sc.pp.neighbors(adata, use_rep=\"X_pca\", n_pcs=30, n_neighbors=20, random_state=2017)\nsc.tl.leiden(adata, key_added=\"seurat_clusters\", resolution=0.8,\n             flavor=\"igraph\", n_iterations=2, random_state=2017, directed=False)\nsc.tl.umap(adata, random_state=2017)\nprint(\"군집 수:\", adata.obs[\"seurat_clusters\"].nunique())\nsc.pl.umap(adata, color=\"seurat_clusters\", legend_loc=\"on data\")"
+      },
+      {
+        "title": "⑦ 마커 유전자 (Wilcoxon)",
+        "code": "sc.tl.rank_genes_groups(adata, groupby=\"seurat_clusters\", method=\"wilcoxon\", use_raw=False)\nsc.get.rank_genes_groups_df(adata, group=None).head(20)"
+      },
+      {
+        "title": "⑧ 마커 기반 세포유형 주석",
+        "desc": "각 군집을 표준 계통 마커 signature에 대해 점수화해 argmax로 라벨링합니다 — 저자의 수동 주석 '의도'를 결정론적으로 재현하는 방식입니다. (실제 논문에서는 이 자리에 상피 계통 marker로 악성세포를 분리하는 단계가 들어갑니다.)",
+        "code": "CELL_TYPE_MARKERS = {\n    \"T cell\": [\"CD3D\",\"CD3E\",\"CD3G\",\"CD2\",\"TRAC\",\"CD8A\",\"CD4\",\"IL7R\"],\n    \"B_Plasma\": [\"CD79A\",\"CD79B\",\"MS4A1\",\"MZB1\",\"IGHG1\",\"IGKC\",\"CD19\"],\n    \"NK\": [\"NKG7\",\"GNLY\",\"KLRD1\",\"KLRF1\",\"NCAM1\",\"NCR1\"],\n    \"Myeloid\": [\"LYZ\",\"CD68\",\"CD14\",\"FCGR3A\",\"ITGAX\",\"AIF1\",\"C1QA\"],\n    \"Epithelial\": [\"EPCAM\",\"KRT19\",\"KRT18\",\"KRT8\",\"CDH1\"],\n}\nfor sig, genes in CELL_TYPE_MARKERS.items():\n    present = [g for g in genes if g in adata.var_names]\n    if present:\n        sc.tl.score_genes(adata, present, score_name=f\"_s_{sig}\")\n    else:\n        adata.obs[f\"_s_{sig}\"] = 0.0\nscores = adata.obs.groupby(\"seurat_clusters\", observed=True)[[f\"_s_{s}\" for s in CELL_TYPE_MARKERS]].mean()\nscores.columns = list(CELL_TYPE_MARKERS)\nassigned = scores.idxmax(axis=1)\nadata.obs[\"cell_type\"] = adata.obs[\"seurat_clusters\"].map(assigned).astype(\"category\")\nprint(assigned)\nsc.pl.umap(adata, color=\"cell_type\", legend_loc=\"right margin\", title=\"cell type (marker-based)\")"
+      },
+      {
+        "title": "마무리 — 원본 파이프라인과의 관계",
+        "desc": "여기서 실행한 코드는 이 재현 파이프라인의 GPU 분석(정규화·PCA·군집·마커·주석)과 **동일한 알고리즘**을 공개 PBMC 3k 데이터로 보여준 것입니다. 실제 전체 파이프라인은 같은 GPU 스택(Scanpy·scVI·inferCNVpy·cNMF)을 **Puram et al. 2017 (Cell)** 의 실제 데이터(**GSE103322**, HNSCC 5,902 세포)에 적용해, 다음의 논문 특이적 분석을 추가로 수행합니다:\n\n- **악성 vs 정상 분리**: inferCNVpy로 대규모 복제수 변이(CNV)를 추론하고 상피 계통 marker(EPCAM/KRT5/KRT14/SFN)로 악성세포를 판정\n- **발현 프로그램 도출**: cNMF로 악성세포에서 세포주기·스트레스·저산소·상피분화·**p-EMT** 프로그램 추출\n- **p-EMT 프로그램 대조**: 원 논문 p-EMT top 유전자(PDPN·LAMC2·LAMB3·MMP10·TGFBI·ITGA5)와 도출 프로그램의 Jaccard·Spearman 상관 계산\n- **전이 연관성 검정**: p-EMT 점수와 림프절(LN) 전이·조직등급의 통계적 연관, TCGA 분자 아형 매핑\n- **독립 검증**: 저자 라벨을 빼고 재도출한 세포유형·악성세포를 저자 라벨과 정량 대조(정확도·F1·ARI·혼동행렬)\n\n대시보드로 돌아가 **'전체 분석 실행'** 을 눌러 실제 논문 데이터로 재현하고, **AI 분석** 패널과 **독립재현 판정**(validation_summary.csv)으로 원 논문 4개 결론의 재현 여부를 확인해 보세요."
+      }
+    ]
   }
 }

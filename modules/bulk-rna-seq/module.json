@@ -1,0 +1,33 @@
+{
+  "id": "bulk-rna-seq",
+  "name": "Bulk RNA-seq (전사체)",
+  "icon": "graph",
+  "description": "Count matrix → 정규화·차등발현(DE)·GSEA → 독립재현 검증 (제출 보고서 재현)",
+  "libraries": [
+    {
+      "id": "venv",
+      "name": "Python / 통계 스택",
+      "desc": "~/ghbio-venv (pandas, numpy, scipy, statsmodels, matplotlib, openpyxl)",
+      "presentPath": "~/ghbio-venv/bin/python",
+      "install": { "pipeline": "pd1-resistant-nsclc-h1299", "script": "00_setup_env.sh", "label": "Install Python stack" }
+    }
+  ],
+  "ai": {
+    "intro": "차등발현·GSEA 결과와 독립재현 검증 지표를 LLM에 보내 해석·판정을 받습니다. 단발성 요청이라 파일을 수정하거나 배회하지 않습니다.",
+    "system": "You are the BioIDE AI Co-Scientist, a careful bulk RNA-seq analyst. Answer the user's ONE question directly using the provided differential-expression tables, GSEA results and independent-reproduction metrics. Be concise, structured (headings, tables, short lists), and rigorous. Separate observation from hypothesis. Do NOT run code or ask to; just interpret. Reply in Korean unless asked otherwise.",
+    "readyFile": "de_p3c_vs_p0c.csv",
+    "context": [
+      { "file": "validation_summary.csv", "heading": "제출 보고서 대비 독립재현 지표·판정 (validation_summary.csv)" },
+      { "file": "de_p3c_vs_p0c.csv", "heading": "P3C vs P0C 차등발현 상위 유전자 (de_p3c_vs_p0c.csv, top by |t|)", "topByRank": 40 },
+      { "file": "gsea_hallmark.csv", "heading": "Hallmark GSEA 결과 (gsea_hallmark.csv)" }
+    ],
+    "readyHint": "결과 파일이 없습니다. 먼저 1~4단계(행렬 준비·DE·GSEA)를 실행해 de_p3c_vs_p0c.csv 를 만들어 주세요.",
+    "prompts": [
+      { "key": "interpret", "label": "Interpret DE result", "q": "P3C vs P0C 차등발현 상위 유전자를 근거로 anti-PD-1 내성 획득 시 종양세포에서 어떤 프로그램이 켜지고 꺼지는지 해석하고, 각 결론의 근거 유전자와 confidence를 표로 제시해줘." },
+      { "key": "gsea", "label": "Interpret GSEA", "q": "Hallmark GSEA 결과(NES·방향)를 바탕으로 P3의 전사체 상태를 요약해줘. 특히 IFN 반응, EMT, Notch/Hedgehog, 증식(E2F/G2M) 방향이 무엇을 의미하는지, 그리고 'Inflamed but Suppressed' 해석이 타당한지 평가해줘." },
+      { "key": "verdict", "label": "독립재현 판정 해석", "q": "validation_summary.csv의 지표(타깃 방향 일치율, fold-change 상관, GSEA 방향 일치)를 근거로 제출 보고서의 핵심 주장이 이 count matrix에서 독립적으로 재현되는지 판정하고, 재현된 부분과 재현되지 않은/추가 데이터가 필요한 부분(PacBio, 단백질 수준)을 구분해줘." },
+      { "key": "hypothesis", "label": "Testable hypotheses", "q": "재현된 결과를 근거로 검증 가능한 가설 3~5개를 제시하고 각 가설의 근거·예측·검증 방법(WB/KD/공배양)을 알려줘." },
+      { "key": "easy_report", "label": "🎓 고등학생 버전 보고서", "q": "이 분석 결과(P3 내성 세포에서 켜진/꺼진 유전자 프로그램)를 바탕으로 **고등학생도 쉽게 이해할 수 있는 '쉬운 리포트'**를 작성해줘. 규칙: (1) 전문용어는 반드시 쉬운 말로 풀어 설명한다. (2) **일상 비유를 아주 많이** 사용한다 — 예: 유전자 발현=공장의 생산량, 내성 획득=적의 공격을 견디도록 요새를 세운 것, ECM 장벽=성벽, 면역세포(T세포)=성을 공격하는 군대, GSEA=여러 유전자를 팀으로 묶어 어느 팀이 활발한지 보는 것, 차등발현=수업 전후 성적 변화표. 비유는 최소 6개 이상 자연스럽게 녹여 쓴다. (3) 순서: ① 무엇을 왜 했는지 ② 내성 세포에서 어떤 유전자가 켜지고 꺼졌는지 ③ 그것이 왜 면역치료가 안 듣게 만드는지 ④ 이 결과가 왜 흥미롭고 앞으로 무엇을 더 알 수 있는지. (4) 어려운 표·숫자는 최소화하고 친근하고 격려하는 말투로 순수 한국어로 쓴다. (5) 맨 끝에 '💡 한 줄 요약'을 넣는다. 제목은 '# 🔬 내성 암세포 이야기 — 고등학생 쉬운 리포트'로 시작한다." }
+    ]
+  }
+}

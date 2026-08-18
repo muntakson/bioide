@@ -92,6 +92,16 @@ const REPRODUCTIONS: Reproduction[] = [
     verdict: "재현됨", confirmed: 2, partial: 1, refuted: 0, novel: 0,
     highlight: "세포유형 재현 정확도 0.96(ARI 0.90) · 정상→종양→전이 악성 간세포 편중(17→29→96→98%) 재현 · 종양 내 3차 림프 구조(TLS): CXCL13 3.7배↑·CXCL13⁺ Tfh 42→67% — 부분 재현(B세포 비율차 작음)",
   },
+  {
+    id: "pd1-resistant-nsclc-h1299", paper: "박상민 (충남대)", year: 2026, journal: "GHBIO 제출 보고서", cancer: "PD-1 내성 폐암 세포주 (H1299-P3 · bulk RNA-seq)",
+    verdict: "재현됨", confirmed: 7, partial: 0, refuted: 0, novel: 0,
+    highlight: "제출 보고서 독립재현 — 저자 padj 미사용, count matrix에서 재도출 · 타깃 방향 일치 100%(99유전자)·FC 상관 r=0.87 · Tier1(XYLT1·S100A16·GALNT6) 3/3 · Hallmark GSEA 7/7(IFN↑·EMT↓·Notch/Hh↓·E2F/G2M↑)로 'Inflamed but Suppressed'·'classical EMT 아님' 재현 (PacBio·단백질 확인은 범위 밖)",
+  },
+  {
+    id: "ddx54-master-regulator-nsclc", paper: "Gong et al.", year: 2025, journal: "PNAS", cancer: "면역-사막 폐암·면역회피 마스터조절자 (LLC1 Ddx54-KD · bulk RNA-seq)",
+    verdict: "재현됨", confirmed: 5, partial: 1, refuted: 0, novel: 0,
+    highlight: "DDX54 면역회피 마스터조절자 논문(PNAS 2025) Fig 6 기능검증 독립재현 — 공개 raw counts(GSE285342)에서 저자 padj 미사용 재도출 · Ddx54 녹다운 확인(logFC−0.81, q=0.003) · 면역회피 분자 Cd47·Cd38 하향 · Hallmark GSEA EMT↓·IL6-JAK-STAT3↓·TNFα-NFκB↓ 재현 (Myc는 유전자↓/Hallmark 프로그램↑로 부분) · TCGA GRN 마스터조절자 추론·in-vivo·단백질 확인은 범위 밖",
+  },
 ]
 
 // One claim-level verdict row parsed out of a pipeline's validation_summary.csv.
