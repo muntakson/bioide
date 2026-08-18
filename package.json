@@ -2,7 +2,7 @@
   "name": "ghbio-coscientist",
   "displayName": "BioIDE",
   "description": "PlatformIO-style scRNA-seq bioinformatics IDE — projects, libraries, tutorials, and reliable single-shot AI analysis.",
-  "version": "0.9.40",
+  "version": "0.9.41",
   "publisher": "ghbio",
   "engines": {
     "vscode": "^1.85.0"
